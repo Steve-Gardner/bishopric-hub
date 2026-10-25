@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { refreshData } from '../data/cloud'
 
 const TRIGGER = 70 // how far to pull, in pixels, before letting go refreshes
@@ -52,10 +53,19 @@ export default function PullToRefresh() {
     }
   }, [])
 
+  // The whole page slides down with the finger, which uncovers the black space the arrow sits in.
+  useEffect(() => {
+    const root = document.getElementById('root')
+    if (!root) return
+    root.style.transition = pull === 0 || busy ? 'transform .2s ease' : 'none'
+    root.style.transform = pull ? `translateY(${pull}px)` : ''
+    if (!pull) { const t = window.setTimeout(() => { root.style.transition = '' }, 250); return () => window.clearTimeout(t) }
+  }, [pull, busy])
+
   if (pull === 0 && !busy) return null
   const ready = pull >= TRIGGER
-  return (
-    <div className="ptr" style={{ transform: `translateY(${pull}px)`, opacity: Math.min(1, pull / 40) }} aria-live="polite">
+  return createPortal(
+    <div className="ptr" style={{ height: pull, opacity: Math.min(1, pull / 40) }} aria-live="polite">
       <div className={`ptr-bubble ${busy ? 'spin' : ''}`}>
         {busy ? (
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 3a9 9 0 1 0 9 9" /></svg>
@@ -64,6 +74,7 @@ export default function PullToRefresh() {
         )}
       </div>
       <span className="ptr-text">{busy ? 'Refreshing…' : ready ? 'Release to refresh' : 'Pull to refresh'}</span>
-    </div>
+    </div>,
+    document.body,
   )
 }
