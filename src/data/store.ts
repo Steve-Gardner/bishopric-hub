@@ -1,5 +1,5 @@
 import type {
-  Appointment, CalendarEvent, CarryMark, CouncilAssignment, CouncilEntry, FsyRef, Gathering, GratitudeAssignment, Individual, ListItem, Member,
+  Appointment, CalendarEvent, CarryMark, CouncilAssignment, CouncilEntry, TeachingAssignment, FsyRef, Gathering, GratitudeAssignment, Individual, ListItem, Member,
   SacramentEntry, ScheduleEdit, ScheduleRow, Setting, StaffName, SundayNote, Youth,
 } from './types'
 import { cacheDrop, cachePut, cached, cloudEnabled, supabase } from './cloud'
@@ -79,6 +79,7 @@ export const gratitudeStore = localStore<GratitudeAssignment>('bishopric.gratitu
 export const individualStore = localStore<Individual>('bishopric.individuals')
 export const councilStore = localStore<CouncilEntry>('bishopric.council')
 export const carryStore = localStore<CarryMark>('bishopric.carried')
+export const teachingStore = localStore<TeachingAssignment>('bishopric.teaching')
 export const councilAssignmentStore = localStore<CouncilAssignment>('bishopric.councilAssignments')
 
 // Every store by name, used for backup/restore and clearing data.
@@ -86,5 +87,5 @@ export const STORES: Record<string, Store<{ id: string }>> = {
   events: eventStore, members: memberStore, sacrament: sacramentStore,
   youth: youthStore, fsy: fsyStore, lists: listStore, schedule: scheduleStore, scheduleEdits: scheduleEditStore,
   appointments: appointmentStore, gathering: gatheringStore, sundays: sundayStore, staff: staffStore, settings: settingStore,
-  gratitude: gratitudeStore, individuals: individualStore, council: councilStore, carried: carryStore, councilAssignments: councilAssignmentStore,
+  gratitude: gratitudeStore, individuals: individualStore, council: councilStore, carried: carryStore, councilAssignments: councilAssignmentStore, teaching: teachingStore,
 } as Record<string, Store<{ id: string }>>

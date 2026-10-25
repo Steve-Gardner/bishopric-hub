@@ -264,3 +264,12 @@ export interface ScheduleEdit {
   movedFrom?: string // extra/family: the Sunday this was moved here from
   family?: boolean // family: true = this is Family Sunday, false = it is not
 }
+
+// Who teaches a young men's quorum on a Sunday (Aaronic Priesthood Teaching schedule).
+export interface TeachingAssignment {
+  id: string // `${date}:${quorum}`
+  date: string // yyyy-MM-dd
+  quorum: 'deacons' | 'teachers' | 'priests'
+  teacher?: string
+  lesson?: string // e.g. "SFY 4", or a note like "Ward Conference"
+}

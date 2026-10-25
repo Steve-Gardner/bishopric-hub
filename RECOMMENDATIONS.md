@@ -178,3 +178,6 @@ Numbered so we can go through them. Priority: **P1** do before anyone else uses 
 6. Remaining P2 and P3 items as time allows.
 
 Each stage is shippable on its own, and stages 2 and 3 are the "magical first time" for the two people who matter most.
+
+## To build: Teaching section on the Youth tab
+The Aaronic Priesthood teaching schedule (who teaches each quorum each Sunday, plus the Strength of Youth lesson) is loaded in the `bishopric.teaching` store. Next: a Teaching section on the Youth tab to view and edit it and to spot Sundays with no teacher.
