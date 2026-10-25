@@ -8,7 +8,7 @@ export interface FieldSpec {
 }
 
 export interface EntryType {
-  role: Exclude<SacramentRole, 'speaker'>
+  role: SacramentRole
   label: string
   fields: FieldSpec[]
   // When none of the fields is marked required, at least one of these must be filled in.
@@ -25,6 +25,11 @@ export const ENTRY_TYPES: EntryType[] = [
   { role: 'benediction', label: 'Closing Prayer', fields: [person] },
   { role: 'youth-speaker', label: 'Youth Speaker', fields: [youthPerson, topic] },
   { role: 'adult-speaker', label: 'Adult Speaker', fields: [person, topic] },
+  // Someone from outside the ward, such as a high councilor or their guest. Kept in the record, never on the ward roster.
+  {
+    role: 'speaker', label: 'Visiting Speaker',
+    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'affiliation', label: 'Who they are (e.g. High Councilor)' }, topic],
+  },
   {
     role: 'hymn', label: 'Congregational Hymn', atLeastOne: ['number', 'title'],
     fields: [{ key: 'number', label: 'Hymn number', placeholder: 'e.g. 85' }, { key: 'title', label: 'Title' }],
@@ -39,10 +44,7 @@ export const ENTRY_TYPES: EntryType[] = [
   },
 ]
 
-export const ROLE_LABEL: Record<SacramentRole, string> = {
-  ...Object.fromEntries(ENTRY_TYPES.map((t) => [t.role, t.label])),
-  speaker: 'Speaker',
-} as Record<SacramentRole, string>
+export const ROLE_LABEL = Object.fromEntries(ENTRY_TYPES.map((t) => [t.role, t.label])) as Record<SacramentRole, string>
 
 // Roles that count towards "Not asked lately".
 export const SPEAKING_ROLES: SacramentRole[] = ['speaker', 'youth-speaker', 'adult-speaker']
@@ -80,7 +82,10 @@ export function describeEntry(entry: Pick<SacramentEntry, 'role' | 'details'>, n
     case 'choir':
       return { headline: d.title || label, label, sub: d.director ? `Directed by ${d.director}` : undefined }
     default:
-      return { headline: name || 'Unknown', label, sub: d.topic ? `Topic: ${d.topic}` : undefined }
+      return {
+        headline: name || d.name || 'Unknown', label,
+        sub: [d.affiliation, d.topic ? `Topic: ${d.topic}` : ''].filter(Boolean).join(' · ') || undefined,
+      }
   }
 }
 

@@ -37,6 +37,20 @@ export default function SpeakersSection({ members, youth, entries }: Props) {
       }
     })
   }, [members, entries])
+  // Visiting speakers (from outside the ward) are recorded by name only, so they are grouped by name here.
+  const visitors = useMemo(() => {
+    const byName = new Map<string, { name: string; affiliation?: string; last: string; times: number }>()
+    for (const e of entries.filter((x) => x.role === 'speaker' && x.details?.name)) {
+      const name = e.details!.name.trim()
+      const cur = byName.get(name.toLowerCase())
+      if (!cur) byName.set(name.toLowerCase(), { name, affiliation: e.details?.affiliation, last: e.date, times: 1 })
+      else {
+        cur.times++
+        if (e.date > cur.last) { cur.last = e.date; cur.affiliation = e.details?.affiliation || cur.affiliation }
+      }
+    }
+    return [...byName.values()].sort((a, b) => (a.last < b.last ? 1 : -1))
+  }, [entries])
   const youthDue = useMemo(() => youthByLastSpoke(youth, entries, todayIso), [youth, entries, todayIso])
 
   // Prayers are given by anyone in the ward, so this list is the adults and the youth together.
@@ -122,6 +136,22 @@ export default function SpeakersSection({ members, youth, entries }: Props) {
       )}
         </div>
       </Fold>
+
+      {visitors.length > 0 && (
+        <Fold red id="speakers-visitors" title="Visiting speakers" count={visitors.length}>
+          <div className="fold-pad">
+          <p className="muted">People from outside the ward who have spoken. They are not on the ward roster.</p>
+          <ul className="plain">
+            {visitors.map((v) => (
+              <li key={v.name}>
+                <span><strong>{v.name}</strong>{v.affiliation && <> <span className="muted small">{v.affiliation}</span></>}</span>
+                <span className="muted">{format(parseISO(v.last), 'MMM d, yyyy')}{v.times > 1 ? ` (${v.times} times)` : ''}</span>
+              </li>
+            ))}
+          </ul>
+          </div>
+        </Fold>
+      )}
 
       {prayerRows.length > 0 && (
         <Fold red id="speakers-pray" title="Prayers" count={prayerRows.length}>
