@@ -10,6 +10,7 @@ import Sacrament from './pages/Sacrament'
 import Setup from './pages/Setup'
 import Splash from './components/Splash'
 import { useDataVersion } from './data/cloud'
+import PullToRefresh from './components/PullToRefresh'
 
 // House icon in the header, shown on every screen.
 function HomeIcon() {
@@ -28,6 +29,7 @@ export default function App() {
   return (
     <HashRouter>
       <Splash />
+      <PullToRefresh />
       <header className="topbar">
         <div className="topline">
           <NavLink to="/" end className="brand">5th Ward Bishopric Hub</NavLink>

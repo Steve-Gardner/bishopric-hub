@@ -43,6 +43,12 @@ export async function loadAll(): Promise<void> {
   }
 }
 
+// Load everything again and redraw the page (pull to refresh).
+export async function refreshData(): Promise<void> {
+  await loadAll()
+  bump()
+}
+
 // Watch for changes made on other phones. A change that arrives while someone is typing waits until they stop,
 // so a page never reloads out from under them.
 export function watchChanges(): () => void {
