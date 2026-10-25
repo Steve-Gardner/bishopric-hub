@@ -11,7 +11,7 @@ export const SECTIONS = [
   { to: '/sacrament', label: 'Sacrament', blurb: 'Speakers and prayers log' },
   { to: '/fsy', label: 'Youth', blurb: 'Weekly lesson and patriarchal blessings' },
   { to: '/schedule', label: 'Schedule', blurb: 'Interviews, conducting, gratitude, special dates' },
-  { to: '/setup', label: 'Setup', blurb: 'Roles, youth roster, backup, and demo data' },
+  { to: '/setup', label: 'Setup', blurb: 'Roles, youth roster, and backup' },
 ]
 
 export default function Home() {

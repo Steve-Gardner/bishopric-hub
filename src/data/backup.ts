@@ -1,5 +1,12 @@
 import { STORES } from './store'
-import { clearAll } from './demo'
+
+// Empties every list; a restore starts from a clean slate.
+async function clearAll() {
+  for (const store of Object.values(STORES)) {
+    const items = await store.list()
+    await Promise.all(items.map((i) => store.remove(i.id)))
+  }
+}
 
 interface Backup {
   app: 'bishopric-hub'
