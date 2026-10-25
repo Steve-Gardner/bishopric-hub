@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { useBlocker } from '../../components/useBlocker'
 import { useDismiss } from '../../components/useDismiss'
+import { findByName } from '../../data/nicknames'
 import { ENTRY_TYPES, PRAYER_ROLES, ROLE_LABEL, describeEntry, missingFields, moveEntry, nextOrder, sortEntries, youthByLastSpoke, type EntryType } from '../../data/sacrament'
 import type { SpecialMeeting } from '../../data/special'
 import { memberStore, sacramentStore } from '../../data/store'
@@ -30,6 +31,18 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
   const { block, dialog } = useBlocker()
   const menuRef = useRef<HTMLDivElement>(null)
 
+  // Past visiting speakers, most recent first, to pick from when adding one again.
+  const visitorsSeen = useMemo(() => {
+    const seen = new Map<string, { name: string; affiliation?: string; date: string }>()
+    for (const e of allEntries) {
+      const name = e.role === 'speaker' ? e.details?.name?.trim() : undefined
+      if (!name) continue
+      const cur = seen.get(name.toLowerCase())
+      if (!cur || e.date > cur.date) seen.set(name.toLowerCase(), { name, affiliation: e.details?.affiliation || cur?.affiliation, date: e.date })
+    }
+    return [...seen.values()].sort((a, b) => (a.date < b.date ? 1 : -1))
+  }, [allEntries])
+
   const sorted = sortEntries(entries)
   const nameOf = (e: SacramentEntry) => e.youthId ? youth.find((y) => y.id === e.youthId)?.name : members.find((m) => m.id === e.memberId)?.name
 
@@ -54,7 +67,7 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
       ? { youthId: values.youth }
       : typed
         ? (() => {
-            const m = members.find((x) => x.name.toLowerCase() === typed)
+            const m = findByName(members, typed)
             const y = !m && PRAYER_ROLES.includes(type.role) ? youth.find((x) => x.name.toLowerCase() === typed) : undefined
             return m ? { memberId: m.id } : y ? { youthId: y.id } : null
           })()
@@ -75,7 +88,7 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
       else if (f.key === 'person') {
         // A youth giving a prayer is recorded against the Youth Roster. Anyone else new is added to Ward Members.
         const lower = v.toLowerCase()
-        let member = members.find((m) => m.name.toLowerCase() === lower)
+        let member = findByName(members, v)
         const young = PRAYER_ROLES.includes(type.role) ? youth.find((y) => y.name.toLowerCase() === lower) : undefined
         if (!member && young) entry.youthId = young.id
         else if (!member) {
@@ -189,14 +202,27 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
               <label key={f.key}>{f.label}
                 <input
                   autoFocus={i === 0}
-                  list={f.key === 'person' ? `roster-${date}` : undefined}
+                  list={f.key === 'person' ? `roster-${date}` : f.key === 'name' ? `visitors-${date}` : undefined}
                   value={values[f.key] ?? ''}
                   placeholder={f.placeholder}
-                  onChange={(ev) => { setValues({ ...values, [f.key]: ev.target.value }); setError('') }}
+                  onChange={(ev) => {
+                    const v = ev.target.value
+                    const next = { ...values, [f.key]: v }
+                    // A visitor who has spoken before: fill in who they are.
+                    if (f.key === 'name' && !values.affiliation) {
+                      const known = visitorsSeen.find((x) => x.name.toLowerCase() === v.trim().toLowerCase())
+                      if (known?.affiliation) next.affiliation = known.affiliation
+                    }
+                    setValues(next)
+                    setError('')
+                  }}
                 />
               </label>
               )
             ))}
+            <datalist id={`visitors-${date}`}>
+              {visitorsSeen.map((v) => <option key={v.name} value={v.name} />)}
+            </datalist>
             <datalist id={`roster-${date}`}>
               {members.map((m) => <option key={m.id} value={m.name} />)}
               {PRAYER_ROLES.includes(type.role) && youth.map((y) => <option key={y.id} value={y.name} />)}

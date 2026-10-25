@@ -1,11 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { Link } from 'react-router-dom'
 import Fold from '../../components/Fold'
 import {
   PRAYER_ROLES, SPEAKING_ROLES, SPOKE_BUCKETS, lastNameKey, spokeBucket, youthByLastSpoke, type SpokeBucket,
 } from '../../data/sacrament'
-import type { Member, Youth, SacramentEntry, SacramentRole } from '../../data/types'
+import { speakerExclusionStore } from '../../data/store'
+import type { Member, Youth, SacramentEntry, SacramentRole, SpeakerExclusion } from '../../data/types'
+
+const REASONS = ['Homebound', 'Health issues', 'Does not attend', 'Other']
+const BAND_COLOR: Record<SpokeBucket, string> = { year: '#c0392b', 'two-years': '#e08a1e', older: '#d4b106' }
 
 type Sort = 'date' | 'name'
 
@@ -20,6 +24,17 @@ interface Props {
 export default function SpeakersSection({ members, youth, entries }: Props) {
   const [bucket, setBucket] = useState<SpokeBucket>('older')
   const [sort, setSort] = useState<Sort>('date')
+  const [excluded, setExcluded] = useState<SpeakerExclusion[]>([])
+  const [hiding, setHiding] = useState<string | null>(null)
+  const loadExcluded = useCallback(() => speakerExclusionStore.list().then(setExcluded), [])
+  useEffect(() => { loadExcluded() }, [loadExcluded])
+  const excludedIds = useMemo(() => new Set(excluded.map((x) => x.id)), [excluded])
+  const hide = async (id: string, reason: string) => {
+    await speakerExclusionStore.save({ id, reason, date: format(new Date(), 'yyyy-MM-dd') })
+    setHiding(null)
+    loadExcluded()
+  }
+  const restore = async (id: string) => { await speakerExclusionStore.remove(id); loadExcluded() }
   const todayIso = format(new Date(), 'yyyy-MM-dd')
 
   // For each adult: the last time they spoke and the last time they prayed.
@@ -32,6 +47,7 @@ export default function SpeakersSection({ members, youth, entries }: Props) {
       const pray = last(m.id, PRAYER_ROLES)
       return {
         m, speak, pray,
+        times: entries.filter((e) => e.memberId === m.id && SPEAKING_ROLES.includes(e.role)).length,
         speakDays: speak ? differenceInCalendarDays(today, parseISO(speak)) : Infinity,
         prayDays: pray ? differenceInCalendarDays(today, parseISO(pray)) : Infinity,
       }
@@ -76,10 +92,10 @@ export default function SpeakersSection({ members, youth, entries }: Props) {
   const ago = (iso?: string, days?: number) =>
     !iso ? 'Never' : `${format(parseISO(iso), 'MMM d, yyyy')} (${Math.round((days ?? 0) / 7)} wk ago)`
 
-  const speakers = ordered(due.filter((r) => spokeBucket(r.speak, todayIso) === bucket), (r) => r.m.name, (r) => r.speakDays)
+  const speakers = ordered(due.filter((r) => !excludedIds.has(r.m.id) && spokeBucket(r.speak, todayIso) === bucket), (r) => r.m.name, (r) => r.speakDays)
   const youthList = ordered(youthDue, (r) => r.youth.name, (r) => r.days)
   const prayers = ordered(prayerRows, (r) => r.name, (r) => r.prayDays)
-  const countIn = (b: SpokeBucket) => due.filter((r) => spokeBucket(r.speak, todayIso) === b).length
+  const countIn = (b: SpokeBucket) => due.filter((r) => !excludedIds.has(r.m.id) && spokeBucket(r.speak, todayIso) === b).length
 
   return (
     <>
@@ -102,12 +118,24 @@ export default function SpeakersSection({ members, youth, entries }: Props) {
               </button>
             ))}
           </div>
-          <p className="muted">When someone last spoke. Never asked counts as over 2 years.</p>
+          <p className="muted">When someone last spoke. Never asked counts as over 2 years. Green dot: never spoken. Yellow: 2+ years. Orange: 1-2 years. Red: within a year.</p>
           <ul className="plain">
             {speakers.map((r) => (
-              <li key={r.m.id}>
-                <strong>{r.m.name}</strong>
-                <span className={spokeBucket(r.speak, todayIso) === 'year' ? 'muted' : 'overdue'}>{ago(r.speak, r.speakDays)}</span>
+              <li key={r.m.id} style={{ flexWrap: 'wrap' }}>
+                <span>
+                  <span aria-hidden style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', marginRight: 8, background: !r.speak ? '#2e9e5b' : BAND_COLOR[spokeBucket(r.speak, todayIso)] }} />
+                  <strong>{r.m.name}</strong> <span className="muted small">{r.times ? `${r.times}×` : 'never'}</span>
+                </span>
+                <span>
+                  <span className={spokeBucket(r.speak, todayIso) === 'year' ? 'muted' : 'overdue'}>{ago(r.speak, r.speakDays)}</span>{' '}
+                  <button className="linkish small" onClick={() => setHiding(hiding === r.m.id ? null : r.m.id)}>Hide</button>
+                </span>
+                {hiding === r.m.id && (
+                  <span style={{ flexBasis: '100%' }} className="row actions">
+                    <span className="muted small">Hide from this list because:</span>
+                    {REASONS.map((x) => <button key={x} onClick={() => hide(r.m.id, x)}>{x}</button>)}
+                  </span>
+                )}
               </li>
             ))}
             {speakers.length === 0 && <li className="muted">No one in this group.</li>}
@@ -116,6 +144,22 @@ export default function SpeakersSection({ members, youth, entries }: Props) {
       )}
         </div>
       </Fold>
+
+      {excluded.length > 0 && (
+        <Fold red id="speakers-hidden" title="Hidden from the list" count={excluded.length}>
+          <div className="fold-pad">
+            <p className="muted">People who should not be asked to speak. Restore them when that changes.</p>
+            <ul className="plain">
+              {excluded.map((x) => (
+                <li key={x.id}>
+                  <span><strong>{members.find((m) => m.id === x.id)?.name ?? 'Unknown'}</strong> <span className="muted small">{x.reason}</span></span>
+                  <button onClick={() => restore(x.id)}>Restore</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Fold>
+      )}
 
       <Fold red id="speakers-youth" title="Youth" count={youth.length}>
         <div className="fold-pad">
