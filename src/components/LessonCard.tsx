@@ -9,7 +9,7 @@ export default function LessonCard() {
   return (
     <div className="card">
       <div className="card-head">
-        <h2>Come, Follow Me Lesson</h2>
+        <span style={{ flex: 1 }} />
         <button onClick={() => setOffset(offset - 1)} aria-label="Previous week">‹</button>
         <button onClick={() => setOffset(0)} disabled={offset === 0}>Today</button>
         <button onClick={() => setOffset(offset + 1)} aria-label="Next week">›</button>

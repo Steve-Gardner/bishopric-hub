@@ -23,8 +23,12 @@ export default function Fsy() {
       <div className="agenda-head" style={{ marginTop: 0 }}>
         <h1>Youth</h1>
       </div>
-      <YouthLessonCard />
-      <LessonCard />
+      <Fold red id="youth-sunday-lesson" title="Youth Sunday Lesson">
+        <YouthLessonCard />
+      </Fold>
+      <Fold red id="youth-cfm-lesson" title="Come, Follow Me Lesson">
+        <LessonCard />
+      </Fold>
 
       <Fold
         red
