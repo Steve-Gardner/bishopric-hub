@@ -6,7 +6,7 @@ Audit date: October 24, 2026. Covers every source file, the demo data, and a pho
 
 ## Status (updated October 24, 2026)
 
-Work is done in Claude Code (Sonnet), following the build order in section 6. Done so far: rec 2 (B1, the device role was being erased on load) and rec 3's first half (the project is now in git). Rec 4 (store people by identity) is done. Rec 1 (shared data) is built and waiting on one thing: an email sender, so sign-in codes can reach everyone. The Supabase project `bishopric-hub` exists, with the tables and access rules in `supabase/schema.sql`. The app signs in by emailed code and reads and writes the shared database. Supabase's built-in email sender only mails the project owner and cannot carry a code, so a real sender (SMTP) must be set up before anyone else can sign in.
+Work is done in Claude Code (Sonnet), following the build order in section 6. Done so far: rec 2 (B1, the device role was being erased on load) and rec 3's first half (the project is now in git). Rec 3 is done: the app is live at https://steve-gardner.github.io/bishopric-hub/ and redeploys on every push to main. Rec 4 (store people by identity) is done. Rec 1 (shared data) is built and working: sign-in codes are emailed. The Supabase project `bishopric-hub` exists, with the tables and access rules in `supabase/schema.sql`. The app signs in by emailed code and reads and writes the shared database. Sign-in codes are sent through a Gmail account's SMTP (a Gmail app password stored in Supabase). The people who may sign in are listed in the `allowed_users` table in Supabase.
 
 ### Advice we are not taking
 
