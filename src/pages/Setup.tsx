@@ -29,7 +29,11 @@ export default function Setup() {
     if (!file) return
     try {
       const text = await file.text()
-      if (!confirm('Restoring replaces everything currently in the app with the backup. Continue?')) return
+      // With shared data this replaces what everyone sees, so it asks for a typed word, not just OK.
+      const sure = cloudEnabled
+        ? prompt('Restoring replaces everything in the shared data with the backup, and cannot be undone. Type RESTORE to continue.')?.trim() === 'RESTORE'
+        : confirm('Restoring replaces everything currently in the app with the backup. Continue?')
+      if (!sure) return
       const n = await importBackup(text)
       setMessage(`Restored ${n} records.`)
       location.hash = '#/'
