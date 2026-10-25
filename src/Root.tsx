@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import App from './App'
 import SignIn from './components/SignIn'
 import { cloudEnabled, loadAll, supabase, watchChanges } from './data/cloud'
+import { mustSignInAgain, noteSignedIn } from './data/signin'
 import { migrateIdentity } from './data/migrate'
 
 type Phase = 'loading' | 'signin' | 'denied' | 'ready' | 'error'
@@ -15,7 +16,8 @@ export default function Root() {
     try {
       if (cloudEnabled) {
         const { data } = await supabase!.auth.getSession()
-        if (!data.session) { setPhase('signin'); return }
+        if (data.session && mustSignInAgain()) await supabase!.auth.signOut() // signed in too long ago
+        if (!data.session || mustSignInAgain()) { setPhase('signin'); return }
         const { data: allowed } = await supabase!.rpc('is_allowed')
         if (!allowed) { setPhase('denied'); return }
         await loadAll()
@@ -30,7 +32,7 @@ export default function Root() {
   useEffect(() => (phase === 'ready' && cloudEnabled ? watchChanges() : undefined), [phase])
 
   if (phase === 'ready') return <App />
-  if (phase === 'signin') return <SignIn onSignedIn={() => { setPhase('loading'); start() }} />
+  if (phase === 'signin') return <SignIn onSignedIn={() => { noteSignedIn(); setPhase('loading'); start() }} />
   if (phase === 'denied') {
     return (
       <main className="signin">
