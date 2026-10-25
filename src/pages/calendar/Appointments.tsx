@@ -1,0 +1,74 @@
+import { useEffect, useState } from 'react'
+import { addDays, format, parseISO } from 'date-fns'
+import BookingWizard from './BookingWizard'
+import InterviewBoard from './InterviewBoard'
+import ListEditor from '../../components/ListEditor'
+import type { Names } from '../../data/conducting'
+import { ROLES } from '../../data/roles'
+import { memberStore, youthStore } from '../../data/store'
+import type { Appointment } from '../../data/types'
+
+// Appointments for one day, grouped by the leader they are with and sorted by time.
+export function groupByLeader(appts: Appointment[], date: string, names: Names = {}): [string, Appointment[]][] {
+  const map = new Map<string, Appointment[]>()
+  for (const a of appts.filter((x) => x.date === date).sort((p, q) => p.time.localeCompare(q.time)))
+    map.set(a.leader, [...(map.get(a.leader) ?? []), a])
+  // Bishop, counselors, clerk, secretary, high councilor first (matched by title or by the name entered in
+  // Roles); anyone else after, alphabetically.
+  const rank = (who: string) => {
+    const w = who.trim().toLowerCase()
+    const i = ROLES.findIndex((r) => r.label.toLowerCase() === w || (!!names[r.key]?.trim() && names[r.key].trim().toLowerCase() === w))
+    return i === -1 ? ROLES.length : i
+  }
+  return [...map.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
+}
+
+interface Props {
+  date: string // the day being worked on
+  setDate: (date: string) => void
+  appts: Appointment[]
+  reload: () => void
+}
+
+const iso = (d: Date) => format(d, 'yyyy-MM-dd')
+
+// Booking is a short wizard; below it, the day's appointments and the follow-up to-do lists.
+export default function Appointments({ date, setDate, appts, reload }: Props) {
+  const [trayHost, setTrayHost] = useState<HTMLElement | null>(null) // where the board shows blocks that are waiting to be placed
+  const [waiting, setWaiting] = useState(0)
+  const [version, setVersion] = useState(0) // bumped when the wizard makes something, so the board loads it
+  const [youthNames, setYouthNames] = useState<string[]>([])
+  const [wardNames, setWardNames] = useState<string[]>([]) // ward members and youth, suggested for a new interview
+  useEffect(() => {
+    Promise.all([youthStore.list(), memberStore.list()]).then(([y, m]) => {
+      setYouthNames(y.map((x) => x.name).sort())
+      setWardNames([...new Set([...m.map((x) => x.name), ...y.map((x) => x.name)])].sort())
+    })
+  }, [])
+  const shift = (days: number) => setDate(iso(addDays(parseISO(date), days)))
+
+  return (
+    <>
+      <BookingWizard names={wardNames} hasPending={waiting > 0} onCreated={() => { setVersion((v) => v + 1); reload() }} />
+      <div ref={setTrayHost} />
+
+      <hr className="day-divider" />
+
+      <h2 className="fold-group-title">Schedule for {format(parseISO(date), 'EEEE, MMM d')}</h2>
+      <div className="date-nav-inline appt-date">
+        <button onClick={() => shift(-7)} aria-label="Previous week" title="Previous week">‹</button>
+        <label className="date-chip" title="Choose a date">
+          {format(parseISO(date), 'EEE, MMM d')}
+          <input type="date" value={date} aria-label={`Date, ${format(parseISO(date), 'MMM d')}. Change`} onChange={(ev) => ev.target.value && setDate(ev.target.value)} />
+        </label>
+        <button onClick={() => shift(7)} aria-label="Next week" title="Next week">›</button>
+      </div>
+      <InterviewBoard date={date} appts={appts} reload={reload} version={version} trayHost={trayHost} onWaiting={setWaiting} />
+
+      <h2 className="todo-heading">To Do</h2>
+      <ListEditor listKey="set-apart" title="Need to be set apart" placeholder="Name and calling" checkable />
+      <ListEditor listKey="youth-interviews" title="Youth interviews to do" placeholder="Name" suggestions={youthNames} checkable />
+      <ListEditor listKey="followups" title="Other follow-ups" placeholder="Name and what's needed" checkable />
+    </>
+  )
+}
