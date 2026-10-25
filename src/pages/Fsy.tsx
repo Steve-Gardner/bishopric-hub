@@ -6,6 +6,7 @@ import LessonCard from '../components/LessonCard'
 import YouthLessonCard from '../components/YouthLessonCard'
 import { youthStore } from '../data/store'
 import PatriarchalBlessings from './youth/PatriarchalBlessings'
+import TeachingSchedule, { useTeachingGaps } from './youth/TeachingSchedule'
 import YouthActivities, { useYouthActivities } from './youth/YouthActivities'
 
 export default function Fsy() {
@@ -17,6 +18,7 @@ export default function Fsy() {
   )
   useEffect(() => { refresh() }, [refresh])
   const { upcoming, past } = useYouthActivities()
+  const gaps = useTeachingGaps()
 
   return (
     <section>
@@ -38,6 +40,10 @@ export default function Fsy() {
         action={<Link to={`/schedule?open=setup-youth-activities&activity=${nextSundayIso()}`} className="fold-add" aria-label="Add a youth activity in Schedule" title="Add in Schedule">+ Add</Link>}
       >
         <YouthActivities upcoming={upcoming} past={past} />
+      </Fold>
+
+      <Fold red id="youth-teaching" title="Teaching Schedule" count={gaps}>
+        <TeachingSchedule />
       </Fold>
 
       <Fold red id="youth-blessings" title="Patriarchal Blessings" count={waiting}>
