@@ -2,7 +2,7 @@
 .schedule-tiles .tile { text-align: left; cursor: pointer; font: inherit; min-height: 96px; }
 .schedule-tiles .tile strong { font-size: 1.05rem; line-height: 1.2; }
 .tiles-divider { grid-column: 1 / -1; width: 100%; margin: 2px 0; }
-.tiles-subtitle { grid-column: 1 / -1; margin: 0; font-size: 1.05rem; color: var(--accent-bright); }
+.tiles-subtitle { grid-column: 1 / -1; margin: 0; font-size: 1.05rem; color: #fff; }
 .tile-back { margin: 4px 0 8px; }
 .tile-title { margin: 6px 0 8px; font-size: 1.15rem; color: var(--accent-bright); }
 .tile-body { margin-bottom: 16px; }
