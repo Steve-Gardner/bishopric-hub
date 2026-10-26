@@ -1,8 +1,17 @@
 import { useState } from 'react'
+import { addDays, format, getDay } from 'date-fns'
 import AttendeePicker from '../../components/AttendeePicker'
+import { useBlocker } from '../../components/useBlocker'
+import { useStaff } from '../../components/useStaff'
 import { everyone, type Attendees } from '../../data/attendees'
+import { appointmentConflicts, eventConflicts } from '../../data/conflicts'
+import { fmtTime } from '../../data/format'
+import type { Slot } from '../../data/openSlots'
+import { defaultRecurrence } from '../../data/recurrence'
+import { ROLES, type RoleKey } from '../../data/roles'
 import { appointmentStore, eventStore } from '../../data/store'
-import type { CalendarEvent } from '../../data/types'
+import type { Appointment, CalendarEvent } from '../../data/types'
+import SlotPicker from './SlotPicker'
 
 const LENGTHS = [10, 15, 20, 30, 45, 60, 90]
 type Kind = 'interview' | 'meeting'
@@ -10,15 +19,21 @@ type Repeat = 'none' | 'weekly' | 'monthly'
 
 interface Props {
   names: string[] // ward members, suggested while typing an interview's name
-  onCreated: () => void
-  hasPending: boolean // something made here is still waiting to be placed on the schedule; the button comes back once it is
+  onCreated: (date: string) => void // the day it was booked on, so the page can show it
 }
 
-// A big red button starts it. First question: interview or meeting? An interview is with one member of the
-// bishopric (decided by the column it is dropped in), so it only needs a name and a length. A meeting needs
-// a title, a length, who attends (everyone to start with) and whether it repeats. Either way the result is a
-// block that waits to be dragged onto the schedule, which sets the time (and, for an interview, who it is with).
-export default function BookingWizard({ names, onCreated, hasPending }: Props) {
+const COUNSELORS: RoleKey[] = ['first-counselor', 'second-counselor']
+const nextSunday = () => { let d = addDays(new Date(), 1); while (getDay(d) !== 0) d = addDays(d, 1); return format(d, 'yyyy-MM-dd') }
+const addMin = (t: string, m: number) => { const [h, mm] = t.split(':').map(Number); const x = h * 60 + mm + m; return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}` }
+
+// A big red button starts it. First question: interview or meeting? An interview needs a name, a length, and
+// whether it is with the bishop or a counselor; then the open times are listed and one tap books it. A meeting
+// needs a title, a length, who attends (everyone to start with), whether it repeats, and a day and time.
+export default function BookingWizard({ names, onCreated }: Props) {
+  const { names: staff } = useStaff()
+  const { block, dialog } = useBlocker()
+  const [withWho, setWithWho] = useState<'bishop' | 'counselor'>('bishop')
+  const [when, setWhen] = useState({ date: nextSunday(), time: '09:30' })
   const [step, setStep] = useState(-1) // -1: just the button
   const [kind, setKind] = useState<Kind>('interview')
   const [name, setName] = useState('') // the interview's person, or the meeting's title
@@ -26,27 +41,38 @@ export default function BookingWizard({ names, onCreated, hasPending }: Props) {
   const [attendees, setAttendees] = useState<Attendees>(everyone)
   const [repeat, setRepeat] = useState<Repeat>('none')
 
-  const stepsFor = kind === 'interview' ? 3 : 5 // kind, name, length (+ who attends, repeats)
+  const stepsFor = kind === 'interview' ? 5 : 6 // kind, name, length, then who it is with and the time (or who attends, repeats, when)
   const finish = () => { setStep(-1); setName(''); setMinutes(0); setAttendees(everyone()); setRepeat('none') }
 
-  const createInterview = async (len: number) => {
-    await appointmentStore.save({ id: crypto.randomUUID(), date: '', leader: '', time: '', name: name.trim(), purpose: 'Interview', minutes: len })
+  const label = (role: RoleKey) => staff[role]?.trim() || ROLES.find((r) => r.key === role)?.label || role
+  const today = () => format(new Date(), 'yyyy-MM-dd')
+
+  const bookInterview = async (slot: Slot) => {
+    const appt: Appointment = {
+      id: crypto.randomUUID(), date: slot.date, time: slot.start, leaderRole: slot.role, leader: label(slot.role),
+      name: name.trim(), purpose: 'Interview', minutes,
+    }
+    // Checked again here, in case someone else booked the time while this was open.
+    const clashes = appointmentConflicts(appt, await eventStore.list(), await appointmentStore.list(), staff)
+    if (clashes.length) { block(clashes.map((c) => c.message)); return }
+    await appointmentStore.save(appt)
     finish()
-    onCreated()
+    onCreated(slot.date)
   }
   const createMeeting = async () => {
     const event: CalendarEvent = {
-      id: crypto.randomUUID(), title: name.trim(), type: 'meeting', date: '', minutes, attendees: attendees.roles, assignedTo: attendees.others || undefined,
-      recurrence: repeat === 'none' ? undefined : { kind: repeat === 'weekly' ? 'weekly' : 'monthly-nth' },
+      id: crypto.randomUUID(), title: name.trim(), type: 'meeting', date: when.date, time: when.time, endTime: addMin(when.time, minutes),
+      attendees: attendees.roles, assignedTo: attendees.others || undefined,
+      recurrence: repeat === 'none' ? undefined : repeat === 'weekly' ? { kind: 'weekly' } : { kind: 'monthly-nth', nth: defaultRecurrence(when.date).nth, weekday: defaultRecurrence(when.date).weekday },
     }
+    const clashes = eventConflicts(event, await eventStore.list(), await appointmentStore.list(), staff, today())
+    if (clashes.length) { block(clashes.map((c) => c.message)); return }
     await eventStore.save(event)
     finish()
-    onCreated()
+    onCreated(when.date)
   }
 
   if (step === -1) {
-    // While something made here waits to be placed, it shows in this spot instead of the button.
-    if (hasPending) return null
     return (
       <div className="wizard-start">
         <button className="big-red" onClick={() => setStep(0)}>Schedule an Interview/Meeting</button>
@@ -96,14 +122,34 @@ export default function BookingWizard({ names, onCreated, hasPending }: Props) {
           <p className="wizard-q">How long will {kind === 'interview' ? `it be with ${name.trim()}` : 'it be'}?</p>
           <div className="choice-grid">
             {LENGTHS.filter((m) => kind === 'meeting' || m <= 60).map((m) => (
-              <button key={m} onClick={() => (kind === 'interview' ? createInterview(m) : (setMinutes(m), setStep(3)))}>{m} min</button>
+              <button key={m} className={minutes === m ? 'primary' : ''} onClick={() => { setMinutes(m); setStep(3) }}>{m} min</button>
             ))}
           </div>
           <div className="row actions"><button onClick={() => setStep(1)}>Back</button></div>
         </>
       )}
 
-      {step === 3 && (
+      {step === 3 && kind === 'interview' && (
+        <>
+          <p className="wizard-q">Who will conduct the interview?</p>
+          <div className="choice-grid">
+            <button onClick={() => { setWithWho('bishop'); setStep(4) }}>{label('bishop')}</button>
+            <button onClick={() => { setWithWho('counselor'); setStep(4) }}>A counselor</button>
+          </div>
+          <p className="muted small">A counselor means either {label('first-counselor')} or {label('second-counselor')}, whoever is free.</p>
+          <div className="row actions"><button onClick={() => setStep(2)}>Back</button></div>
+        </>
+      )}
+
+      {step === 4 && kind === 'interview' && (
+        <>
+          <p className="wizard-q">Pick a time for {name.trim()} ({minutes} min with {withWho === 'bishop' ? label('bishop') : 'a counselor'}).</p>
+          <SlotPicker minutes={minutes} roles={withWho === 'bishop' ? ['bishop'] : COUNSELORS} onPick={bookInterview} />
+          <div className="row actions"><button onClick={() => setStep(3)}>Back</button></div>
+        </>
+      )}
+
+      {step === 3 && kind === 'meeting' && (
         <>
           <p className="wizard-q">Who attends?</p>
           <AttendeePicker legend="Bishopric members" value={attendees} onChange={setAttendees} />
@@ -114,7 +160,7 @@ export default function BookingWizard({ names, onCreated, hasPending }: Props) {
         </>
       )}
 
-      {step === 4 && (
+      {step === 4 && kind === 'meeting' && (
         <>
           <p className="wizard-q">Does it repeat?</p>
           <div className="choice-grid">
@@ -124,12 +170,26 @@ export default function BookingWizard({ names, onCreated, hasPending }: Props) {
           </div>
           <div className="row actions">
             <button onClick={() => setStep(3)}>Back</button>
+            <button className="primary" onClick={() => setStep(5)}>Next</button>
+          </div>
+        </>
+      )}
+
+      {step === 5 && kind === 'meeting' && (
+        <>
+          <p className="wizard-q">When is it?</p>
+          <label>Day<input type="date" value={when.date} onChange={(ev) => ev.target.value && setWhen({ ...when, date: ev.target.value })} /></label>
+          <label>Start time<input type="time" value={when.time} onChange={(ev) => ev.target.value && setWhen({ ...when, time: ev.target.value })} /></label>
+          <p className="muted small">{fmtTime(when.time)} to {fmtTime(addMin(when.time, minutes))}. If anyone is already booked then, it will say so.</p>
+          <div className="row actions">
+            <button onClick={() => setStep(4)}>Back</button>
             <button className="primary" onClick={createMeeting}>Create</button>
           </div>
         </>
       )}
 
       <div className="row actions"><button onClick={finish}>Cancel</button></div>
+      {dialog}
     </div>
   )
 }

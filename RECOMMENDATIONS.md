@@ -15,8 +15,8 @@ The audit was written without the conversation history. These recommendations un
 | Rec | Why we are not doing it (yet) |
 |-----|-------------------------------|
 | 7. Splash once per install | Steve asked to see the splash more often, on every refresh. |
-| 11 / B2. Always show the big red button | Steve asked for the waiting block to replace the button until it is placed. The block has a remove button, so nobody is stuck. Watch for confusion in real use. |
-| 10. Rebuild booking as a form with suggested slots | Steve designed the wizard and chose true drag and drop. Suggested open slots (the useful part) can be added later without replacing it. |
+| 11 / B2. Always show the big red button | No longer an issue: nothing waits to be placed any more, so the button is always there. |
+| 10. Rebuild booking as a form with suggested slots | Done in a different shape (see below): Steve kept the wizard's first steps and replaced drag and drop with tapping an open time. |
 | 21. Edit events on the Calendar itself | Steve asked for editing to live on the Schedule tab, with the Calendar linking there. |
 | 25. Remember open sections between visits | Steve asked for every section to start closed on each load. |
 | 29. Remove the Youth Council "Coming Soon" tab | Steve asked for it, as a signal of what is planned. |
@@ -93,6 +93,9 @@ The Clerk's actual job: record what happened (who spoke, prayed, was sustained, 
 The Clerk will be won over by one thing: open the app after church, tap "This Sunday", and see a list they can read straight into LCR.
 
 ### Executive Secretary
+**Update (Oct 25, 2026):** Drag and drop did not work well on a phone, so booking no longer uses it. The wizard asks interview or meeting, then name, length, and for an interview whether it is with the bishop or a counselor (either counselor, whoever is free). It then lists the open times on the next few Sundays, taken from the interview blocks on the Sunday schedule minus anything already booked. One tap books it; tapping a booked interview on the day view lets you move it to another open time or remove it. A meeting asks who attends, whether it repeats, and a day and time. Still open: the confirmation message (rec 12), weekday interviews (rec 13), linking youth interviews to the roster (rec 14).
+
+The walkthrough below describes the older drag-and-drop flow.
 The Exec Secretary's job is almost entirely: get interview requests, find a slot that works for the right bishopric member, confirm with the member, and keep the Sunday interview schedule accurate. Today, booking one interview is: Calendar → + Add → "Interview or meeting" → new page → big red button → Interview → type name → pick length → a chip appears → drag the chip onto a three-column grid where five minutes is 17 pixels → hope it lands in the right column. The purpose is never captured. There is no phone number, no "text the member a confirmation", and if the drag is misunderstood the button vanishes (B2). This flow is the single most important thing to redesign. It should be: tap "Book an interview", type a name (suggested from the roster), pick who it is with, tap a suggested open slot (the app knows the free slots), done, with a "Copy confirmation message" button. Drag can stay as a power feature for rearranging.
 
 ### High Councilor

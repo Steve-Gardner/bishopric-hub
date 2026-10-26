@@ -1,20 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { useBlocker } from '../../components/useBlocker'
 import { useStaff } from '../../components/useStaff'
 import { APPOINTMENT_MINUTES, appointmentConflicts, eventConflicts } from '../../data/conflicts'
 import { fmtRange, fmtTime } from '../../data/format'
-import { defaultRecurrence, eventsOnDay } from '../../data/recurrence'
+import type { Slot } from '../../data/openSlots'
+import { eventsOnDay } from '../../data/recurrence'
 import { ROLES } from '../../data/roles'
 import { attendeeLabel, leaderLabel as apptLeader } from '../../data/people'
 import { appointmentStore, eventStore } from '../../data/store'
-import { PRESIDENCY_COLUMNS, addMinutes, presidencyItems, splitColumns } from '../../data/todaySchedule'
+import { PRESIDENCY_COLUMNS, presidencyItems, splitColumns } from '../../data/todaySchedule'
+import SlotPicker from './SlotPicker'
 import type { Appointment, CalendarEvent } from '../../data/types'
 
 const PX = 3.4 // pixels per minute
 const GUTTER = 44 // width of the time labels
-const SNAP = 5 // a meeting snaps to the nearest 5 minutes
 const DEFAULT_MINUTES = APPOINTMENT_MINUTES
 
 const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
@@ -25,28 +25,20 @@ interface Props {
   appts: Appointment[]
   reload: () => void
   version: number // changes when a meeting is made elsewhere, to load the events again
-  trayHost: HTMLElement | null // where the waiting blocks are shown: in the wizard's place, above
-  onWaiting: (count: number) => void // how many are waiting, so the wizard knows whether to show its button
 }
 
-interface Drag { id: string; x: number; y: number; moved: boolean }
-
-// The day as three columns (Bishop, 1st Counselor, 2nd Counselor) down a time line. Meetings that are made but
-// not placed wait above it. Drag one onto a column and time and it takes that
-// leader and start time; drag it somewhere else and both change with it.
-export default function InterviewBoard({ date, appts, reload, version, trayHost, onWaiting }: Props) {
+// The day as three columns (Bishop, 1st Counselor, 2nd Counselor) down a time line. Tap an interview to move
+// it to another open time or take it off the schedule.
+export default function InterviewBoard({ date, appts, reload, version }: Props) {
   const { names } = useStaff()
   const { block, dialog } = useBlocker()
   const [events, setEvents] = useState<CalendarEvent[]>([])
-  const [drag, setDrag] = useState<Drag | null>(null)
-  const grid = useRef<HTMLDivElement>(null)
-  const origin = useRef({ x: 0, y: 0 })
+  const [picked, setPicked] = useState<string | null>(null) // the interview whose sheet is open
+  const [moving, setMoving] = useState(false)
 
   const loadEvents = () => eventStore.list().then(setEvents)
   useEffect(() => { loadEvents() }, [date, version])
 
-  const pending = appts.filter((a) => !a.date)
-  const pendingMeetings = events.filter((e) => !e.date && e.type === 'meeting')
   const items = useMemo(
     () => presidencyItems(eventsOnDay(events, date), appts.filter((a) => a.date === date), names),
     [events, appts, date, names],
@@ -60,69 +52,19 @@ export default function InterviewBoard({ date, appts, reload, version, trayHost,
     return names[role.key]?.trim() || role.label
   }
 
-  // The column and snapped start time under a point, or null when it is outside the grid.
-  const slotAt = (clientX: number, clientY: number) => {
-    const r = grid.current?.getBoundingClientRect()
-    if (!r) return null
-    const x = clientX - r.left - GUTTER
-    const y = clientY - r.top
-    if (x < 0 || y < 0 || y > r.height || clientX > r.right) return null
-    const col = Math.min(2, Math.floor(x / ((r.width - GUTTER) / 3)))
-    return { col, start: Math.min(END - 5, START + Math.round(y / PX / SNAP) * SNAP) }
-  }
-
-  // Blocks are told apart by a prefix: a: for an interview, e: for a meeting.
-  const place = async (key: string, slot: { col: number; start: number }) => {
-    const [kind, id] = [key.slice(0, 1), key.slice(2)]
-    if (kind === 'a') {
-      const appt = appts.find((a) => a.id === id)
-      if (!appt) return
-      const moved: Appointment = { ...appt, date, leaderRole: PRESIDENCY_COLUMNS[slot.col], leader: leaderLabel(slot.col), time: hhmm(slot.start) }
-      const clashes = appointmentConflicts(moved, events, await appointmentStore.list(), names)
-      if (clashes.length) { block(clashes.map((c) => c.message)); return }
-      await appointmentStore.save(moved)
-      reload()
-      return
-    }
-    // A meeting: the time comes from where it is dropped. A new one also takes the day, and a repeating one
-    // repeats from that day. A meeting already placed keeps its day and only changes time (for every repeat).
-    const ev = events.find((e) => e.id === id)
-    if (!ev) return
-    const length = ev.minutes ?? (ev.time && ev.endTime ? toMin(ev.endTime) - toMin(ev.time) : 60)
-    const placing = !ev.date
-    const { minutes: _length, ...rest } = ev
-    const moved: CalendarEvent = {
-      ...rest, date: placing ? date : ev.date, time: hhmm(slot.start), endTime: hhmm(slot.start + length),
-      recurrence: placing && ev.recurrence ? { ...ev.recurrence, nth: defaultRecurrence(date).nth, weekday: defaultRecurrence(date).weekday } : ev.recurrence,
-    }
-    const clashes = eventConflicts(moved, await eventStore.list(), await appointmentStore.list(), names, format(new Date(), 'yyyy-MM-dd'))
+  // Move an interview to an open time picked in the sheet.
+  const moveTo = async (appt: Appointment, slot: Slot) => {
+    const moved: Appointment = { ...appt, date: slot.date, time: slot.start, leaderRole: slot.role, leader: leaderLabel(PRESIDENCY_COLUMNS.indexOf(slot.role)) }
+    const clashes = appointmentConflicts(moved, events, await appointmentStore.list(), names)
     if (clashes.length) { block(clashes.map((c) => c.message)); return }
-    await eventStore.save(moved)
-    await loadEvents()
+    await appointmentStore.save(moved)
+    setPicked(null)
+    setMoving(false)
     reload()
   }
-
-  const down = (id: string) => (ev: React.PointerEvent) => {
-    ev.currentTarget.setPointerCapture(ev.pointerId)
-    origin.current = { x: ev.clientX, y: ev.clientY }
-    setDrag({ id, x: ev.clientX, y: ev.clientY, moved: false })
-  }
-  const move = (ev: React.PointerEvent) => {
-    if (!drag) return
-    const far = Math.hypot(ev.clientX - origin.current.x, ev.clientY - origin.current.y) > 6
-    setDrag({ ...drag, x: ev.clientX, y: ev.clientY, moved: drag.moved || far })
-  }
-  const up = (ev: React.PointerEvent) => {
-    if (!drag) return
-    const { id, moved } = drag
-    setDrag(null)
-    if (!moved) return // a tap without dragging does nothing
-    const slot = slotAt(ev.clientX, ev.clientY)
-    if (slot) place(id, slot)
-  }
   const remove = async (key: string) => {
-    if (key.startsWith('a:')) await appointmentStore.remove(key.slice(2))
-    else { await eventStore.remove(key.slice(2)); await loadEvents() }
+    await appointmentStore.remove(key.slice(2))
+    setPicked(null)
     reload()
   }
 
@@ -140,55 +82,31 @@ export default function InterviewBoard({ date, appts, reload, version, trayHost,
     }
   }
 
-  const preview = drag?.moved ? slotAt(drag.x, drag.y) : null
-  const dragged = drag ? info(drag.id) : undefined
   const hours = Array.from({ length: (END - START) / 60 + 1 }, (_, i) => START + i * 60)
   const spanStyle = (col: number, span: number) => ({
     left: `calc(${GUTTER}px + (100% - ${GUTTER}px) * ${col} / 3 + 2px)`,
     width: `calc((100% - ${GUTTER}px) * ${span} / 3 - 4px)`,
   })
 
-  // A block you drag onto the time line.
+  // A block on the time line. An interview can be tapped to move or remove it.
   const chip = (key: string, extra?: string) => {
     const i = info(key)
     if (!i) return null
-    return (
-      <div
-        key={key}
-        className={`board-meeting ${drag?.id === key && drag.moved ? 'lifted' : ''} ${extra ?? ''}`}
-        onPointerDown={down(key)} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
-        role="img" aria-label={`${i.name}, ${i.minutes} minutes${i.time ? `, ${fmtTime(i.time)}` : ''}, ${i.detail}`}
-      >
-        <span><strong>{i.name}</strong> <span className="small">{i.minutes} min{i.time ? ` · ${fmtTime(i.time)}` : ''}</span></span>
-      </div>
+    const tappable = key.startsWith('a:')
+    const text = <span><strong>{i.name}</strong> <span className="small">{i.minutes} min{i.time ? ` · ${fmtTime(i.time)}` : ''}</span></span>
+    const label = `${i.name}, ${i.minutes} minutes${i.time ? `, ${fmtTime(i.time)}` : ''}, ${i.detail}`
+    return tappable ? (
+      <button key={key} className={`board-meeting ${extra ?? ''}`} aria-label={`${label}. Tap to move or remove`} onClick={() => { setMoving(false); setPicked(key) }}>{text}</button>
+    ) : (
+      <div key={key} className={`board-meeting ${extra ?? ''}`} role="img" aria-label={label}>{text}</div>
     )
   }
-  const waiting = [...pending.map((a) => `a:${a.id}`), ...pendingMeetings.map((e) => `e:${e.id}`)]
-  useEffect(() => { onWaiting(waiting.length) }, [waiting.length]) // eslint-disable-line react-hooks/exhaustive-deps
-  const interviewsOnly = pendingMeetings.length === 0
-  const meetingsOnly = pending.length === 0
-  const instructions = interviewsOnly
-    ? 'Drag it onto the schedule below, in the column of who will conduct it.'
-    : meetingsOnly
-      ? 'Drag it onto the schedule below to set its time.'
-      : 'Drag each onto the schedule below. An interview goes in the column of who will conduct it; a meeting only needs a time.'
+
+  const sheetAppt = picked ? appts.find((a) => `a:${a.id}` === picked) : undefined
+  const sheetRoles = sheetAppt?.leaderRole === 'bishop' ? ['bishop' as const] : PRESIDENCY_COLUMNS.filter((r) => r !== 'bishop')
 
   return (
     <>
-      {trayHost && waiting.length > 0 && createPortal(
-        <div className="board-tray">
-          <p className="tray-note">{instructions}</p>
-          <div className="tray-chips">
-            {waiting.map((key) => (
-              <span key={key} className="tray-item">
-                {chip(key, 'in-tray')}
-                <button className="danger" aria-label={`Remove ${info(key)?.name}`} onClick={() => remove(key)}>✕</button>
-              </span>
-            ))}
-          </div>
-        </div>,
-        trayHost,
-      )}
       <div className="board-heads" style={{ paddingLeft: GUTTER }}>
         {PRESIDENCY_COLUMNS.map((role, i) => (
           <div key={role} className="today-head">
@@ -199,7 +117,7 @@ export default function InterviewBoard({ date, appts, reload, version, trayHost,
         ))}
       </div>
 
-      <div className="board" ref={grid} style={{ height: (END - START) * PX }}>
+      <div className="board" style={{ height: (END - START) * PX }}>
         {[0, 1, 2].map((c) => (
           <div key={`lane-${c}`} className={`lane lane-${c}`} style={{ ...spanStyle(c, 1), top: 0, bottom: 0 }} aria-hidden="true" />
         ))}
@@ -224,23 +142,33 @@ export default function InterviewBoard({ date, appts, reload, version, trayHost,
           return (
             <div key={`${key}:${p.column}`} className="board-slot" style={style}>
               {chip(key, p.item.source === 'event' ? 'placed meeting' : 'placed')}
-              {p.item.source === 'appointment' && (
-                <button className="danger board-x" aria-label={`Remove ${p.item.title}`} onClick={(ev2) => { ev2.stopPropagation(); remove(key) }}>✕</button>
-              )}
             </div>
           )
         })}
-        {preview && dragged && (
-          <div
-            className="board-preview"
-            style={{ ...spanStyle(dragged.span === 3 ? 0 : preview.col, dragged.span), top: (preview.start - START) * PX, height: dragged.minutes * PX }}
-          >
-            {dragged.span === 1 ? `${leaderLabel(preview.col)} · ` : ''}{fmtTime(hhmm(preview.start))} to {fmtTime(addMinutes(hhmm(preview.start), dragged.minutes))}
-          </div>
-        )}
       </div>
-      <p className="muted small">{format(parseISO(date), 'EEEE, MMM d')}. Other things on the bishopric's calendar show in gray. Drag a meeting that is already placed to change its time.</p>
-      {drag?.moved && dragged && <div className="board-ghost" style={{ left: drag.x, top: drag.y }}>{dragged.name}</div>}
+      <p className="muted small">{format(parseISO(date), 'EEEE, MMM d')}. Other things on the bishopric's calendar show in gray. Tap an interview to move it or take it off.</p>
+
+      {sheetAppt && (
+        <div className="modal" onClick={() => { setPicked(null); setMoving(false) }}>
+          <div className="sheet popup" role="dialog" aria-modal="true" aria-label={sheetAppt.name} onClick={(ev) => ev.stopPropagation()}>
+            <h2>{sheetAppt.name}</h2>
+            <p className="muted">{fmtTime(sheetAppt.time)} · {sheetAppt.minutes ?? DEFAULT_MINUTES} min · with {apptLeader(sheetAppt, names)}{sheetAppt.purpose ? ` · ${sheetAppt.purpose}` : ''}</p>
+            {moving ? (
+              <>
+                <p className="wizard-q">Pick a new time</p>
+                <SlotPicker minutes={sheetAppt.minutes ?? DEFAULT_MINUTES} roles={sheetRoles} ignoreId={sheetAppt.id} onPick={(slot) => moveTo(sheetAppt, slot)} />
+                <div className="row actions"><button onClick={() => setMoving(false)}>Back</button></div>
+              </>
+            ) : (
+              <div className="row actions">
+                <button className="primary" onClick={() => setMoving(true)}>Move to another time</button>
+                <button className="danger" onClick={() => remove(picked!)}>Remove</button>
+                <button onClick={() => setPicked(null)}>Close</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {dialog}
     </>
   )

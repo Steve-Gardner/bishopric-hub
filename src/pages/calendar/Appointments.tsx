@@ -32,10 +32,8 @@ interface Props {
 
 const iso = (d: Date) => format(d, 'yyyy-MM-dd')
 
-// Booking is a short wizard; below it, the day's appointments and the follow-up to-do lists.
+// Booking is a short wizard that ends by tapping an open time; below it, the day's appointments and the follow-up to-do lists.
 export default function Appointments({ date, setDate, appts, reload }: Props) {
-  const [trayHost, setTrayHost] = useState<HTMLElement | null>(null) // where the board shows blocks that are waiting to be placed
-  const [waiting, setWaiting] = useState(0)
   const [version, setVersion] = useState(0) // bumped when the wizard makes something, so the board loads it
   const [youthNames, setYouthNames] = useState<string[]>([])
   const [wardNames, setWardNames] = useState<string[]>([]) // ward members and youth, suggested for a new interview
@@ -49,8 +47,7 @@ export default function Appointments({ date, setDate, appts, reload }: Props) {
 
   return (
     <>
-      <BookingWizard names={wardNames} hasPending={waiting > 0} onCreated={() => { setVersion((v) => v + 1); reload() }} />
-      <div ref={setTrayHost} />
+      <BookingWizard names={wardNames} onCreated={(booked) => { setDate(booked); setVersion((v) => v + 1); reload() }} />
 
       <hr className="day-divider" />
 
@@ -63,7 +60,7 @@ export default function Appointments({ date, setDate, appts, reload }: Props) {
         </label>
         <button onClick={() => shift(7)} aria-label="Next week" title="Next week">›</button>
       </div>
-      <InterviewBoard date={date} appts={appts} reload={reload} version={version} trayHost={trayHost} onWaiting={setWaiting} />
+      <InterviewBoard date={date} appts={appts} reload={reload} version={version} />
 
       <h2 className="todo-heading">To Do</h2>
       <ListEditor listKey="set-apart" title="Need to be set apart" placeholder="Name and calling" checkable />

@@ -672,3 +672,9 @@ a.lesson-link { color: #b9b1b2; font-style: italic; }
 .ptr-text { font-size: .75rem; color: var(--muted); }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
 html, body { overscroll-behavior-y: contain; }
+
+/* Tap-to-pick interview times */
+.slot-picker { margin: 8px 0; }
+.slot-day { margin: 10px 0 14px; }
+.slot-day h3 { margin: 0 0 4px; font-size: 1rem; }
+button.board-meeting { width: 100%; text-align: left; cursor: pointer; font: inherit; }
