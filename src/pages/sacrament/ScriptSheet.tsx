@@ -37,7 +37,6 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
   type Pulled = { announcements: string; releases: string; sustainings: string }
   // This Sunday's Sacrament Announcements, Releases and Sustainings on the Bishopric Agenda
   const [agenda, setAgenda] = useState<Pulled>({ announcements: '', releases: '', sustainings: '' })
-  const [stakeAsk, setStakeAsk] = useState(false)
   const loaded = useRef(false)
 
   useEffect(() => {
@@ -115,7 +114,6 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
       </div>
     )
   }
-  const stakeLabel = answers.stakeWho.trim() || 'to be written in'
 
   const blocks = buildScript({ answers: { ...answers, ...merged }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
 
@@ -153,16 +151,17 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
           {pulled('sustainings', 'Sustainings (one per line)', 'Name as Calling')}
 
           <h3 className="wiz-section">Other Business</h3>
-          <label className="check">
-            <input type="checkbox" checked={answers.stakeBusiness} onChange={(ev) => {
-              setAnswers({ ...answers, stakeBusiness: ev.target.checked, stakeWho: ev.target.checked ? answers.stakeWho : '' })
-              setStakeAsk(ev.target.checked)
-            }} /> Stake business
+          <label className="wiz-check">
+            <input type="checkbox" checked={answers.stakeBusiness} onChange={(ev) => setAnswers({ ...answers, stakeBusiness: ev.target.checked, stakeWho: ev.target.checked ? answers.stakeWho : '' })} /> Stake business
           </label>
           {answers.stakeBusiness && (
-            <p className="muted small stake-who">Stake business: {stakeLabel} <button type="button" className="link-btn" onClick={() => setStakeAsk(true)}>Edit</button></p>
+            <div className="stake-name">
+              <label>Who will conduct the stake business?
+                <input value={answers.stakeWho} placeholder="Leave blank to write it in" onChange={(ev) => set('stakeWho', ev.target.value)} />
+              </label>
+            </div>
           )}
-          <label className="check"><input type="checkbox" checked={answers.babyBlessings} onChange={(ev) => set('babyBlessings', ev.target.checked)} /> Baby blessing</label>
+          <label className="wiz-check"><input type="checkbox" checked={answers.babyBlessings} onChange={(ev) => set('babyBlessings', ev.target.checked)} /> Baby blessing</label>
           {answers.babyBlessings && (
             <div className="baby-names">
               {answers.babies.map((n, i) => (
@@ -183,14 +182,14 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
               {Object.values(named).map(({ entry, name, group }) => {
                 const chosen = answers.titles[entry.id] ?? defaultTitle(name, group)
                 return (
-                  <fieldset key={entry.id} className="title-pick">
-                    <legend>{name || 'Unknown'} <small className="muted">{ROLE_LABEL[entry.role]}</small></legend>
-                    {[...TITLES, ''].map((t) => (
-                      <label key={t || 'as-is'} className="check">
-                        <input type="radio" name={`title-${entry.id}`} checked={chosen === t} onChange={() => set('titles', { ...answers.titles, [entry.id]: t })} /> {t || 'As entered'}
-                      </label>
-                    ))}
-                  </fieldset>
+                  <label key={entry.id} className="title-pick">
+                    <select value={chosen ?? 'unset'} onChange={(ev) => set('titles', { ...answers.titles, [entry.id]: ev.target.value })} aria-label={`Title for ${name}`}>
+                      {chosen === undefined && <option value="unset" disabled>Choose title</option>}
+                      <option value=""> </option>
+                      {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <span>{name || 'Unknown'}<small className="muted">{ROLE_LABEL[entry.role]}</small></span>
+                  </label>
                 )
               })}
             </>
@@ -210,20 +209,6 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
           })}
         </article>
       </div>
-      {stakeAsk && (
-        <div className="modal no-print" onClick={(ev) => { ev.stopPropagation(); setStakeAsk(false) }}>
-          <form className="sheet popup" role="dialog" aria-modal="true" aria-label="Stake business" onClick={(ev) => ev.stopPropagation()}
-            onSubmit={(ev) => { ev.preventDefault(); setStakeAsk(false) }}>
-            <h2>Stake business</h2>
-            <label>Who will conduct the stake business?
-              <input autoFocus value={answers.stakeWho} placeholder="Leave blank to write it in" onChange={(ev) => set('stakeWho', ev.target.value)} />
-            </label>
-            <div className="row actions">
-              <button type="submit" className="primary">Done</button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>,
     document.body,
   )

@@ -707,10 +707,11 @@ button.board-meeting { width: 100%; text-align: left; cursor: pointer; font: inh
   .script-gap { background: none; border: 1px solid #000; }
   .script-heading { border-color: #000; break-after: avoid; }
 }
-.script-wizard .check { display: flex; align-items: center; gap: 8px; }
-.script-wizard .check input { width: auto; }
-.title-pick { border: 0; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
-.title-pick legend { float: left; margin-right: 10px; font-weight: 600; }
+.script-wizard .wiz-check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 1rem; margin: 12px 0 4px; }
+.script-wizard .wiz-check input { width: auto; margin: 0; }
+.script-wizard .title-pick { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.script-wizard .title-pick select { width: 9.5rem; flex: none; margin: 0; }
+.title-pick span { font-weight: 600; }
 .baby-names { margin: 6px 0 0 24px; }
 .baby-names .row { align-items: flex-end; }
 .link-btn { background: none; border: 0; color: var(--accent-bright); text-decoration: underline; padding: 4px 0; }
@@ -731,4 +732,5 @@ button.board-event { text-align: left; cursor: pointer; font: inherit; }
 .script-wizard summary { font-size: 1.15rem; }
 .script-wizard .wiz-section { margin: 22px -12px 6px; padding: 8px 12px; font-size: 1.25rem; background: var(--accent); color: #fff !important; opacity: 1; border-radius: 0; }
 .script-wizard .wiz-section:first-of-type { margin-top: 10px; }
-.title-pick legend small { font-weight: 400; margin-left: 4px; }
+.title-pick small { font-weight: 400; margin-left: 4px; }
+.stake-name { margin: 6px 0 0 24px; }
