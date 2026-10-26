@@ -6,3 +6,4 @@
 
 /* The last hour label sits just below the board; leave room for it */
 .board { margin-bottom: 20px; }
+.wizard-q .wizard-step { font-size: .8rem; font-weight: 400; white-space: nowrap; }

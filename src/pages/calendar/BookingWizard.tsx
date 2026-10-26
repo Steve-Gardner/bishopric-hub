@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { addDays, format, getDay } from 'date-fns'
 import AttendeePicker from '../../components/AttendeePicker'
 import NameSuggest from '../../components/NameSuggest'
@@ -50,6 +50,10 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
   const stepsFor = kind === 'interview' ? 5 : 6 // kind, name, length, then who it is with and the time (or who attends, repeats, when)
   const finish = () => { setStep(-1); setName(''); setMinutes(0); setCustomLength(false); setAttendees(everyone()); setRepeat('none') }
 
+  // The question, with the step count small beside it.
+  const Q = ({ children }: { children: ReactNode }) => (
+    <p className="wizard-q">{children} <span className="wizard-step muted small">Step {step + 1} of {stepsFor}</span></p>
+  )
   const label = (role: RoleKey) => staff[role]?.trim() || ROLES.find((r) => r.key === role)?.label || role
   const today = () => format(new Date(), 'yyyy-MM-dd')
 
@@ -90,12 +94,11 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
     <div className="card wizard">
       <div className="wizard-corner">
         <button onClick={finish}>Cancel</button>
-        <span className="muted small">Step {step + 1} of {stepsFor}</span>
       </div>
 
       {step === 0 && (
         <>
-          <p className="wizard-q">Is it an interview or a meeting?</p>
+          <Q>Is it an interview or a meeting?</Q>
           <div className="choice-grid">
             <button className="primary" onClick={() => { setKind('interview'); setStep(1) }}>Interview</button>
             <button className="primary" onClick={() => { setKind('meeting'); setStep(1) }}>Meeting</button>
@@ -105,7 +108,7 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
       {step === 1 && (
         <form onSubmit={(ev) => { ev.preventDefault(); if (name.trim()) setStep(2) }}>
-          <p className="wizard-q">{kind === 'interview' ? 'Who is the interview for?' : 'What is the meeting called?'}</p>
+          <Q>{kind === 'interview' ? 'Who is the interview for?' : 'What is the meeting called?'}</Q>
           {kind === 'interview' ? (
             <label>Ward member
               <NameSuggest autoFocus value={name} names={names} placeholder="Type a name" onChange={setName} />
@@ -124,7 +127,7 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
       {step === 2 && (
         <>
-          <p className="wizard-q">How long will {kind === 'interview' ? `it be with ${name.trim()}` : 'it be'}?</p>
+          <Q>How long will {kind === 'interview' ? `it be with ${name.trim()}` : 'it be'}?</Q>
           <div className="choice-grid">
             {LENGTHS.filter((m) => kind === 'meeting' || m <= 60).map((m) => (
               <button key={m} className={minutes === m ? 'primary' : ''} onClick={() => { setMinutes(m); setStep(3) }}>{m} min</button>
@@ -145,7 +148,7 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
       {step === 3 && kind === 'interview' && (
         <>
-          <p className="wizard-q">Who will conduct the interview?</p>
+          <Q>Who will conduct the interview?</Q>
           <div className="choice-grid">
             <button className="primary" onClick={() => { setWithWho('bishop'); setStep(4) }}>{label('bishop')}</button>
             <button className="primary" onClick={() => { setWithWho('counselor'); setStep(4) }}>A counselor</button>
@@ -157,7 +160,7 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
       {step === 4 && kind === 'interview' && (
         <>
-          <p className="wizard-q">Pick a time for {name.trim()}</p>
+          <Q>Pick a time for {name.trim()}</Q>
           <p className="muted small">{minutes} min with {withWho === 'bishop' ? label('bishop') : 'a counselor'}</p>
           <SlotPicker minutes={minutes} roles={withWho === 'bishop' ? ['bishop'] : COUNSELORS} onPick={bookInterview} />
           <div className="row actions"><button onClick={() => setStep(3)}>Back</button></div>
@@ -166,7 +169,7 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
       {step === 3 && kind === 'meeting' && (
         <>
-          <p className="wizard-q">Who attends?</p>
+          <Q>Who attends?</Q>
           <AttendeePicker legend="Bishopric members" value={attendees} onChange={setAttendees} />
           <div className="row actions">
             <button onClick={() => setStep(2)}>Back</button>
@@ -177,7 +180,7 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
       {step === 4 && kind === 'meeting' && (
         <>
-          <p className="wizard-q">Does it repeat?</p>
+          <Q>Does it repeat?</Q>
           <div className="choice-grid">
             {([['none', 'Just once'], ['weekly', 'Every week'], ['monthly', 'Monthly, same weekday']] as [Repeat, string][]).map(([k, label]) => (
               <button key={k} className={repeat === k ? 'primary' : ''} onClick={() => setRepeat(k)}>{label}</button>
@@ -192,7 +195,7 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
       {step === 5 && kind === 'meeting' && (
         <>
-          <p className="wizard-q">When is it?</p>
+          <Q>When is it?</Q>
           <label>Day<input type="date" value={when.date} onChange={(ev) => ev.target.value && setWhen({ ...when, date: ev.target.value })} /></label>
           <label>Start time<input type="time" value={when.time} onChange={(ev) => ev.target.value && setWhen({ ...when, time: ev.target.value })} /></label>
           <p className="muted small">{fmtTime(when.time)} to {fmtTime(addMin(when.time, minutes))}. If anyone is already booked then, it will say so.</p>
