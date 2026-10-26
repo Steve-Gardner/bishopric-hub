@@ -728,3 +728,7 @@ button.board-meeting { width: 100%; text-align: left; cursor: pointer; font: inh
 .slot-override { margin: 12px 0; border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; }
 .slot-override summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 button.board-event { text-align: left; cursor: pointer; font: inherit; }
+.script-wizard summary { font-size: 1.15rem; }
+.script-wizard .wiz-section { margin: 22px -12px 6px; padding: 8px 12px; font-size: 1.25rem; background: var(--accent); color: #fff !important; opacity: 1; border-radius: 0; }
+.script-wizard .wiz-section:first-of-type { margin-top: 10px; }
+.title-pick legend small { font-weight: 400; margin-left: 4px; }

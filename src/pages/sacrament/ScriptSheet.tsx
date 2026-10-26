@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { format, parseISO } from 'date-fns'
 import { ROLES } from '../../data/roles'
-import { sortEntries } from '../../data/sacrament'
+import { ROLE_LABEL, sortEntries } from '../../data/sacrament'
 import { TITLES, buildScript, defaultAnswers, defaultTitle, type HymnAnswer, type ScriptAnswers } from '../../data/script'
 import { listStore, settingStore } from '../../data/store'
 import type { Member, SacramentEntry, Youth } from '../../data/types'
@@ -34,17 +34,20 @@ function Marked({ text }: { text: string }) {
 // finished script below it, ready to print or save as a PDF.
 export default function ScriptSheet({ date, entries, members, youth, conducting, presiding, onClose }: Props) {
   const [answers, setAnswers] = useState<ScriptAnswers | null>(null)
-  const [agendaAnnouncements, setAgendaAnnouncements] = useState('') // this Sunday's Sacrament Announcements on the Bishopric Agenda
+  type Pulled = { announcements: string; releases: string; sustainings: string }
+  // This Sunday's Sacrament Announcements, Releases and Sustainings on the Bishopric Agenda
+  const [agenda, setAgenda] = useState<Pulled>({ announcements: '', releases: '', sustainings: '' })
+  const [stakeAsk, setStakeAsk] = useState(false)
   const loaded = useRef(false)
 
   useEffect(() => {
     let alive = true
     Promise.all([settingStore.list(), listStore.list()]).then(([all, lists]) => {
       if (!alive) return
-      setAgendaAnnouncements(
-        lists.filter((i) => i.list === `agenda:announcements@${date}`).sort((a, b) => a.order - b.order)
-          .map((i) => [i.text, i.notes?.replace(/\s*\n\s*/g, ' ').trim()].filter(Boolean).join(': ')).join('\n'),
-      )
+      const pull = (key: string) =>
+        lists.filter((i) => i.list === `${key}@${date}`).sort((a, b) => a.order - b.order)
+          .map((i) => [i.text, i.notes?.replace(/\s*\n\s*/g, ' ').trim()].filter(Boolean).join(': ')).join('\n')
+      setAgenda({ announcements: pull('agenda:announcements'), releases: pull('agenda:releases'), sustainings: pull('agenda:sustainings') })
       const byId = Object.fromEntries(all.map((s) => [s.id, s.value]))
       let saved: Partial<ScriptAnswers> = {}
       try { saved = JSON.parse(byId[answersKey(date)] ?? '{}') } catch { /* start fresh */ }
@@ -80,24 +83,41 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
 
   if (!answers) return null
   const set = <K extends keyof ScriptAnswers>(k: K, v: ScriptAnswers[K]) => setAnswers({ ...answers, [k]: v })
-  const hymn = (k: 'openingHymn' | 'sacramentHymn' | 'closingHymn', label: string) => {
-    const h: HymnAnswer = answers[k]
-    return (
-      <div className="row script-hymn" key={k}>
-        <label>{label} #<input inputMode="numeric" value={h.number} onChange={(ev) => set(k, { ...h, number: ev.target.value })} /></label>
-        <label>Title<input value={h.title} onChange={(ev) => set(k, { ...h, title: ev.target.value })} /></label>
-      </div>
-    )
+  const merged = {
+    announcements: answers.announcements ?? agenda.announcements,
+    releases: answers.releases ?? agenda.releases,
+    sustainings: answers.sustainings ?? agenda.sustainings,
   }
-  const announcements = answers.announcements ?? agendaAnnouncements
+  // A list that comes from the agenda: shows the agenda's items until it is edited here.
+  const pulled = (k: keyof Pulled, label: string, hint: string) => (
+    <>
+      <label>{label}
+        <textarea rows={3} value={merged[k]} placeholder={hint} onChange={(ev) => set(k, ev.target.value)} />
+      </label>
+      {answers[k] !== undefined && answers[k] !== agenda[k] && (
+        <button type="button" className="link-btn" onClick={() => setAnswers({ ...answers, [k]: undefined })}>Use the agenda’s list again</button>
+      )}
+    </>
+  )
   const text = (k: keyof ScriptAnswers, label: string, hint?: string) => (
     <label>{label}<input value={answers[k] as string} placeholder={hint} onChange={(ev) => set(k, ev.target.value as never)} /></label>
   )
-  const area = (k: keyof ScriptAnswers, label: string, hint?: string) => (
-    <label>{label}<textarea rows={3} value={answers[k] as string} placeholder={hint} onChange={(ev) => set(k, ev.target.value as never)} /></label>
-  )
+  const hymn = (k: 'openingHymn' | 'sacramentHymn' | 'closingHymn', label: string) => {
+    const h: HymnAnswer = answers[k]
+    const missing = !h.number.trim() && !h.title.trim()
+    return (
+      <div key={k}>
+        <div className="row script-hymn">
+          <label>{label} #<input inputMode="numeric" value={h.number} onChange={(ev) => set(k, { ...h, number: ev.target.value })} /></label>
+          <label>Title<input value={h.title} onChange={(ev) => set(k, { ...h, title: ev.target.value })} /></label>
+        </div>
+        {missing && <p className="muted small">Not on the program yet. Type it here to add it to the script.</p>}
+      </div>
+    )
+  }
+  const stakeLabel = answers.stakeWho.trim() || 'to be written in'
 
-  const blocks = buildScript({ answers: { ...answers, announcements }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
+  const blocks = buildScript({ answers: { ...answers, ...merged }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
 
   return createPortal(
     <div className="modal script-modal" onClick={onClose}>
@@ -112,25 +132,36 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
 
         <details className="script-wizard no-print" open>
           <summary>Questions for this Sunday</summary>
-          <p className="muted">Conducting and the speakers, prayers and hymns come from the program. Fill in anything else; gaps show highlighted in the script.</p>
+          <h3 className="wiz-section">Presiding and Visitors</h3>
           {text('presiding', 'Presiding', 'e.g. Bishop Smith')}
           {text('visiting', 'Visiting leaders to recognize (if known)', 'Leave blank to write it in on the printed script')}
+
+          <h3 className="wiz-section">Announcements</h3>
+          {pulled('announcements', 'Announcements', 'Event, date, time, location, what to bring')}
+
+          <h3 className="wiz-section">Music</h3>
           <div className="row">
             {text('pianist', 'Pianist / organist')}
             {text('chorister', 'Chorister')}
           </div>
-          <label>Announcements (from the Bishopric Agenda; edit as needed)
-            <textarea rows={3} value={announcements} placeholder="Event, date, time, location, what to bring" onChange={(ev) => set('announcements', ev.target.value)} />
-          </label>
-          {answers.announcements !== undefined && answers.announcements !== agendaAnnouncements && (
-            <button type="button" className="link-btn" onClick={() => setAnswers({ ...answers, announcements: undefined })}>Use the agenda’s announcements again</button>
-          )}
           {hymn('openingHymn', 'Opening hymn')}
           {hymn('sacramentHymn', 'Sacrament hymn')}
           {hymn('closingHymn', 'Closing hymn')}
-          {area('releases', 'Releases (one per line)', 'Name as Calling')}
-          {area('sustainings', 'Sustainings (one per line)', 'Name as Calling')}
-          <label className="check"><input type="checkbox" checked={answers.stakeBusiness} onChange={(ev) => set('stakeBusiness', ev.target.checked)} /> Stake business</label>
+
+          <h3 className="wiz-section">Callings</h3>
+          {pulled('releases', 'Releases (one per line)', 'Name as Calling')}
+          {pulled('sustainings', 'Sustainings (one per line)', 'Name as Calling')}
+
+          <h3 className="wiz-section">Other Business</h3>
+          <label className="check">
+            <input type="checkbox" checked={answers.stakeBusiness} onChange={(ev) => {
+              setAnswers({ ...answers, stakeBusiness: ev.target.checked, stakeWho: ev.target.checked ? answers.stakeWho : '' })
+              setStakeAsk(ev.target.checked)
+            }} /> Stake business
+          </label>
+          {answers.stakeBusiness && (
+            <p className="muted small stake-who">Stake business: {stakeLabel} <button type="button" className="link-btn" onClick={() => setStakeAsk(true)}>Edit</button></p>
+          )}
           <label className="check"><input type="checkbox" checked={answers.babyBlessings} onChange={(ev) => set('babyBlessings', ev.target.checked)} /> Baby blessing</label>
           {answers.babyBlessings && (
             <div className="baby-names">
@@ -148,12 +179,12 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
 
           {Object.values(named).length > 0 && (
             <>
-              <h3>Titles</h3>
+              <h3 className="wiz-section">Prayers and Speakers</h3>
               {Object.values(named).map(({ entry, name, group }) => {
                 const chosen = answers.titles[entry.id] ?? defaultTitle(name, group)
                 return (
                   <fieldset key={entry.id} className="title-pick">
-                    <legend>{name || 'Unknown'}</legend>
+                    <legend>{name || 'Unknown'} <small className="muted">{ROLE_LABEL[entry.role]}</small></legend>
                     {[...TITLES, ''].map((t) => (
                       <label key={t || 'as-is'} className="check">
                         <input type="radio" name={`title-${entry.id}`} checked={chosen === t} onChange={() => set('titles', { ...answers.titles, [entry.id]: t })} /> {t || 'As entered'}
@@ -179,6 +210,20 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
           })}
         </article>
       </div>
+      {stakeAsk && (
+        <div className="modal no-print" onClick={(ev) => { ev.stopPropagation(); setStakeAsk(false) }}>
+          <form className="sheet popup" role="dialog" aria-modal="true" aria-label="Stake business" onClick={(ev) => ev.stopPropagation()}
+            onSubmit={(ev) => { ev.preventDefault(); setStakeAsk(false) }}>
+            <h2>Stake business</h2>
+            <label>Who will conduct the stake business?
+              <input autoFocus value={answers.stakeWho} placeholder="Leave blank to write it in" onChange={(ev) => set('stakeWho', ev.target.value)} />
+            </label>
+            <div className="row actions">
+              <button type="submit" className="primary">Done</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>,
     document.body,
   )

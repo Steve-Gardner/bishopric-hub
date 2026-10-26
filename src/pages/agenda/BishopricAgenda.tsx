@@ -12,8 +12,10 @@ import OrgNotesSection, { ORGS } from './OrgNotesSection'
 import ScheduleAndEvents from './ScheduleAndEvents'
 
 // Lists that belong to a single meeting date. Everything else on this page carries over by itself.
-// Announcements are about that week only, so they are not carried over.
+// Announcements, releases and sustainings are about that week only, so they are not carried over.
 const ANNOUNCEMENTS = 'agenda:announcements'
+const RELEASES = 'agenda:releases'
+const SUSTAININGS = 'agenda:sustainings'
 const CALLINGS = 'agenda:callings'
 const OTHER = 'agenda'
 const CARRIED_OVER = [CALLINGS, OTHER]
@@ -60,8 +62,14 @@ export default function BishopricAgenda({ date, prevOf }: Props) {
       </Fold>
 
       <div key={date + version}>
-        <Fold red id={`agenda-${ANNOUNCEMENTS}`} title={<>Sacrament Announcements{conductor && <small className="conducting"> (Conducting: {conductor})</small>}</>} count={counts[keyFor(ANNOUNCEMENTS)]}>
+        <Fold red id={`agenda-${ANNOUNCEMENTS}`} title={<>Sacrament Announcements{conductor && <small className="conducting"> (Conducting: {conductor})</small>}</>} count={(counts[keyFor(ANNOUNCEMENTS)] ?? 0) + (counts[keyFor(RELEASES)] ?? 0) + (counts[keyFor(SUSTAININGS)] ?? 0)}>
           <ListEditor notes listKey={keyFor(ANNOUNCEMENTS)} placeholder="Announcement" onChange={refresh} />
+          <Fold id={`agenda-${RELEASES}`} title="Releases" count={counts[keyFor(RELEASES)]}>
+            <ListEditor listKey={keyFor(RELEASES)} placeholder="Name as Calling" onChange={refresh} />
+          </Fold>
+          <Fold id={`agenda-${SUSTAININGS}`} title="Sustainings" count={counts[keyFor(SUSTAININGS)]}>
+            <ListEditor listKey={keyFor(SUSTAININGS)} placeholder="Name as Calling" onChange={refresh} />
+          </Fold>
         </Fold>
 
         <Fold red id="agenda-other-items" title="Other Items" count={otherCount}>

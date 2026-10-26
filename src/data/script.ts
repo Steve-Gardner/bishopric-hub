@@ -18,9 +18,10 @@ export interface ScriptAnswers {
   openingHymn: HymnAnswer
   sacramentHymn: HymnAnswer
   closingHymn: HymnAnswer
-  releases: string // one per line: "Name as Calling"
-  sustainings: string // one per line
+  releases?: string // one per line: "Name as Calling"; absent means "follow the Bishopric Agenda"
+  sustainings?: string // same
   stakeBusiness: boolean
+  stakeWho: string // who has the stake business, if known
   babyBlessings: boolean
   babies: string[] // the children's names; a blank entry prints as a blank to write in
   titles: Record<string, string> // how to address a person, by entry id: Brother, Sister, President, or '' to say the name as entered
@@ -125,8 +126,8 @@ export function buildScript(input: ScriptInput): Block[] {
   out.push({ kind: 'say', text: `Thank you, ${opening ? said(input, opening) : '[Brother/Sister Name]'}, for the opening prayer.` })
 
   // Ward business
-  const releases = lines(a.releases)
-  const sustainings = lines(a.sustainings)
+  const releases = lines(a.releases ?? '')
+  const sustainings = lines(a.sustainings ?? '')
   if (releases.length || sustainings.length) {
     out.push({ kind: 'heading', text: 'Ward Business' })
     if (releases.length) {
@@ -144,7 +145,7 @@ export function buildScript(input: ScriptInput): Block[] {
   // Sacrament
   out.push({ kind: 'heading', text: 'Sacrament Hymn & Sacrament' })
   const stake = a.stakeBusiness
-  if (stake) out.push({ kind: 'say', text: `We will now turn the time over to ${BLANK} for Stake Business.` })
+  if (stake) out.push({ kind: 'say', text: `We will now turn the time over to ${a.stakeWho.trim() || BLANK} for Stake Business.` })
   out.push({
     kind: 'say',
     text: `${stake ? 'Following the stake business, we' : 'We'} will prepare to remember the Savior through the sacrament by singing ${hymnText(a.sacramentHymn)}.`,
@@ -230,8 +231,8 @@ const isSpeakerRole = (role: string) => role.endsWith('speaker')
 export function defaultAnswers(entries: SacramentEntry[], base: Partial<ScriptAnswers>): ScriptAnswers {
   const hymns = sortEntries(entries).filter((e) => e.role === 'hymn').map((e) => ({ number: e.details?.number ?? '', title: e.details?.title ?? '' }))
   return {
-    presiding: '', visiting: '', pianist: '', chorister: '', releases: '', sustainings: '',
-    stakeBusiness: false, babyBlessings: false, babies: [''], titles: {},
+    presiding: '', visiting: '', pianist: '', chorister: '',
+    stakeBusiness: false, stakeWho: '', babyBlessings: false, babies: [''], titles: {},
     ...base,
     openingHymn: base.openingHymn ?? hymns[0] ?? emptyHymn(),
     sacramentHymn: base.sacramentHymn ?? hymns[1] ?? emptyHymn(),
