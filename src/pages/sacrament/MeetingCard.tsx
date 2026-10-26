@@ -2,10 +2,10 @@ import { useMemo, useRef, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { useBlocker } from '../../components/useBlocker'
 import { useDismiss } from '../../components/useDismiss'
-import { findByName } from '../../data/nicknames'
+import { conflictFor, lookupPerson, resolvePerson, type Who } from '../../data/sacramentPeople'
 import { ENTRY_TYPES, PRAYER_ROLES, ROLE_LABEL, describeEntry, missingFields, moveEntry, nextOrder, sortEntries, youthByLastSpoke, type EntryType } from '../../data/sacrament'
 import type { SpecialMeeting } from '../../data/special'
-import { memberStore, sacramentStore } from '../../data/store'
+import { sacramentStore } from '../../data/store'
 import type { Member, SacramentEntry, Youth } from '../../data/types'
 import ScriptSheet from './ScriptSheet'
 
@@ -64,17 +64,10 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
     if (problem) { setError(problem); return }
 
     // One person can't be given two parts in the same meeting (a prayer and a talk, say).
-    const typed = values.person?.trim().toLowerCase()
-    const who = type.fields.some((f) => f.key === 'youth')
+    const who: Who | null = type.fields.some((f) => f.key === 'youth')
       ? { youthId: values.youth }
-      : typed
-        ? (() => {
-            const m = findByName(members, typed)
-            const y = !m && PRAYER_ROLES.includes(type.role) ? youth.find((x) => x.name.toLowerCase() === typed) : undefined
-            return m ? { memberId: m.id } : y ? { youthId: y.id } : null
-          })()
-        : null
-    const already = who && entries.find((e) => (who.memberId ? e.memberId === who.memberId : e.youthId === who.youthId))
+      : values.person?.trim() ? lookupPerson(type.role, values.person, members, youth) : null
+    const already = who && conflictFor(entries, who)
     if (already) {
       const name = who.memberId ? members.find((m) => m.id === who.memberId)?.name : youth.find((y) => y.id === who.youthId)?.name
       block([`${name} is already on the ${format(parseISO(date), 'MMM d')} program as ${ROLE_LABEL[already.role]}.`])
@@ -89,15 +82,9 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
       if (f.key === 'youth') entry.youthId = v
       else if (f.key === 'person') {
         // A youth giving a prayer is recorded against the Youth Roster. Anyone else new is added to Ward Members.
-        const lower = v.toLowerCase()
-        let member = findByName(members, v)
-        const young = PRAYER_ROLES.includes(type.role) ? youth.find((y) => y.name.toLowerCase() === lower) : undefined
-        if (!member && young) entry.youthId = young.id
-        else if (!member) {
-          member = { id: crypto.randomUUID(), name: v }
-          await memberStore.save(member)
-        }
-        if (member) entry.memberId = member.id
+        const r = await resolvePerson(type.role, v, members, youth)
+        if (r.youthId) entry.youthId = r.youthId
+        if (r.memberId) entry.memberId = r.memberId
       } else details[f.key] = v
     }
     if (Object.keys(details).length) entry.details = details
@@ -204,7 +191,7 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
               <label key={f.key}>{f.label}
                 <input
                   autoFocus={i === 0}
-                  list={f.key === 'person' ? `roster-${date}` : f.key === 'name' ? `visitors-${date}` : undefined}
+                  list={f.key === 'person' ? `roster-${date}` : f.key === 'name' ? `visitors-${date}` : f.key === 'affiliation' ? 'affiliations' : undefined}
                   value={values[f.key] ?? ''}
                   placeholder={f.placeholder}
                   onChange={(ev) => {
@@ -222,6 +209,7 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
               </label>
               )
             ))}
+            <datalist id="affiliations"><option value="High Councilor" /></datalist>
             <datalist id={`visitors-${date}`}>
               {visitorsSeen.map((v) => <option key={v.name} value={v.name} />)}
             </datalist>

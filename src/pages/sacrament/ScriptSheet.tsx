@@ -5,10 +5,11 @@ import AutoTextarea from '../../components/AutoTextarea'
 import PencilIcon from '../../components/PencilIcon'
 import ReorderList from '../../components/ReorderList'
 import { ROLES } from '../../data/roles'
-import { ROLE_LABEL, describeEntry, nextOrder, sortEntries } from '../../data/sacrament'
-import { TITLES, buildScript, defaultAnswers, defaultTitle, type Block, type HymnAnswer, type ScriptAnswers } from '../../data/script'
+import { ROLE_LABEL, describeEntry, nextOrder, sortEntries, youthByLastSpoke } from '../../data/sacrament'
+import { conflictFor, lookupPerson, placeEntry, resolvePerson, type Who } from '../../data/sacramentPeople'
+import { HIGH_COUNCILOR, POSITIONS, STAKE_LEADERS, TITLES, YOUTH_SPEAKER, buildScript, emptyVisitor, defaultAnswers, defaultTitle, type Block, type HymnAnswer, type ScriptAnswers, type Visitor } from '../../data/script'
 import { listStore, sacramentStore, settingStore } from '../../data/store'
-import type { Member, SacramentEntry, Youth } from '../../data/types'
+import type { Member, SacramentEntry, SacramentRole, Youth } from '../../data/types'
 
 interface Props {
   date: string
@@ -47,6 +48,13 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
   const [musicType, setMusicType] = useState<'musical' | 'choir'>('musical')
   const [music, setMusic] = useState({ performers: '', title: '' })
   const [addingMusic, setAddingMusic] = useState(false)
+  // Adding, swapping or removing a speaker or prayer here changes the Sacrament program itself.
+  const [addingPart, setAddingPart] = useState(false)
+  const [partKind, setPartKind] = useState<SacramentRole>('youth-speaker')
+  const [part, setPart] = useState({ name: '', youth: '', affiliation: '' })
+  const [partError, setPartError] = useState('')
+  const [changing, setChanging] = useState<string | null>(null)
+  const [changeTo, setChangeTo] = useState('')
   // The script as edited by hand for this Sunday only; null while it still follows Meeting Setup.
   const [manual, setManual] = useState<Block[] | null>(null)
   const [editing, setEditing] = useState(false)
@@ -130,6 +138,69 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
     await Promise.all(all.map((x, n) => sacramentStore.save({ ...x, order: n })))
     onChange()
   }
+  const nameOfWho = (who: Who) => (who.memberId ? members.find((m) => m.id === who.memberId)?.name : youth.find((y) => y.id === who.youthId)?.name) ?? 'That person'
+  const taken = (who: Who, ignoreId?: string) => {
+    const other = conflictFor(entries, who, ignoreId)
+    return other ? `${nameOfWho(who)} is already on the program as ${ROLE_LABEL[other.role]}.` : ''
+  }
+  const forgetTitle = (id: string) => {
+    const { [id]: _gone, ...rest } = answers.titles
+    return rest
+  }
+  const addPartEntry = async () => {
+    const name = part.name.trim()
+    const entry: SacramentEntry = { id: crypto.randomUUID(), date, role: partKind }
+    if (partKind === 'youth-speaker') {
+      if (!part.youth) { setPartError('Choose a youth.'); return }
+      const clash = taken({ youthId: part.youth })
+      if (clash) { setPartError(clash); return }
+      entry.youthId = part.youth
+    } else if (partKind === 'speaker') {
+      if (!name) { setPartError('Enter a name.'); return }
+      entry.details = { name, ...(part.affiliation.trim() ? { affiliation: part.affiliation.trim() } : {}) }
+    } else {
+      if (!name) { setPartError('Enter a name.'); return }
+      const known = lookupPerson(partKind, name, members, youth)
+      const clash = known ? taken(known) : ''
+      if (clash) { setPartError(clash); return }
+      const who = await resolvePerson(partKind, name, members, youth)
+      if (who.memberId) entry.memberId = who.memberId
+      if (who.youthId) entry.youthId = who.youthId
+    }
+    await Promise.all(placeEntry(sorted, entry).map((x) => sacramentStore.save(x)))
+    setAddingPart(false)
+    setPart({ name: '', youth: '', affiliation: '' })
+    setPartError('')
+    onChange()
+  }
+  const changePerson = async (e: SacramentEntry) => {
+    const value = changeTo.trim()
+    if (!value) { setPartError('Choose or enter someone.'); return }
+    let next: SacramentEntry
+    if (e.role === 'youth-speaker') {
+      const clash = taken({ youthId: value }, e.id)
+      if (clash) { setPartError(clash); return }
+      next = { ...e, youthId: value }
+    } else if (e.role === 'speaker') {
+      next = { ...e, details: { ...e.details, name: value } }
+    } else {
+      const known = lookupPerson(e.role, value, members, youth)
+      const clash = known ? taken(known, e.id) : ''
+      if (clash) { setPartError(clash); return }
+      const who = await resolvePerson(e.role, value, members, youth)
+      next = { ...e, memberId: who.memberId, youthId: who.youthId }
+    }
+    await sacramentStore.save(next)
+    setAnswers({ ...answers, titles: forgetTitle(e.id) }) // a new person needs a title of their own
+    setChanging(null)
+    setPartError('')
+    onChange()
+  }
+  const removePart = async (e: SacramentEntry) => {
+    await sacramentStore.remove(e.id)
+    setAnswers({ ...answers, titles: forgetTitle(e.id) })
+    onChange()
+  }
   const set = <K extends keyof ScriptAnswers>(k: K, v: ScriptAnswers[K]) => setAnswers({ ...answers, [k]: v })
   const merged = {
     announcements: answers.announcements ?? agenda.announcements,
@@ -167,7 +238,9 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
   // The bishop presides: his name from Roles, once one has been entered there.
   const bishop = leaders[0] ?? ''
   const presiding = bishop && bishop !== ROLES[0].label ? `Bishop ${bishop.replace(/^Bishop\s+/i, '')}` : ''
-  const standard = buildScript({ date, answers: { ...answers, ...merged, presiding }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
+  const bishopConducting = !!leaders[0] && conducting === leaders[0]
+  const dyslexic = answers.dyslexic ?? bishopConducting // on for the bishop unless someone turns it off
+  const standard = buildScript({ date, bishopConducting, answers: { ...answers, ...merged, presiding }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
   const blocks = manual ?? standard
 
   return createPortal(
@@ -190,12 +263,55 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
         <div className="script-wizard no-print">
           <h3 className="wiz-section">Presiding and Visitors</h3>
           <label>Conducting
-            <select value={conducting} onChange={(ev) => onConducting(ev.target.value)}>
+            <select value={conducting} onChange={(ev) => {
+              onConducting(ev.target.value)
+              // The bishop's script is printed in the dyslexia-friendly font: choosing him turns it on, and choosing anyone else goes back to off.
+              setAnswers({ ...answers, dyslexic: ev.target.value === leaders[0] ? true : undefined })
+            }}>
               {!leaders.includes(conducting) && <option value={conducting}>{conducting || 'No one'}</option>}
               {leaders.map((l, i) => <option key={l} value={l}>{l}{l !== ROLES[i].label ? ` (${ROLES[i].label})` : ''}</option>)}
             </select>
           </label>
-          {text('visiting', 'Visiting leaders to recognize (if known)', 'Leave blank to write it in on the printed script')}
+          <h4 className="wiz-sub">Visiting leaders to recognize (if known)</h4>
+          {[...answers.visitors, emptyVisitor()].map((v, i) => {
+            const isNew = i === answers.visitors.length
+            // Only rows with someone chosen are kept; a fresh empty row always follows for the next leader.
+            const save = (next: Visitor) => {
+              const list = isNew ? [...answers.visitors, next] : answers.visitors.map((x, j) => (j === i ? next : x))
+              // Only one person can preside: checking one clears the rest.
+              const only = list.map((x) => (next.presiding && x !== next ? { ...x, presiding: false } : x))
+              set('visitors', only.filter((x) => x.who !== ''))
+            }
+            return (
+              <div className="visitor-row" key={i}>
+                <label>Name
+                  <select value={v.who} onChange={(ev) => {
+                    const leader = STAKE_LEADERS.find((l) => l.key === ev.target.value)
+                    save({ ...v, who: ev.target.value, position: leader ? leader.position : v.position })
+                  }}>
+                    <option value="">{isNew && i > 0 ? 'Add another' : 'Choose'}</option>
+                    {STAKE_LEADERS.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
+                    <option value="other">Other</option>
+                  </select>
+                  {v.who === 'other' && <input aria-label="Name" value={v.name} placeholder="Type a name" onChange={(ev) => save({ ...v, name: ev.target.value })} />}
+                </label>
+                <label>Position
+                  <select value={v.position} disabled={v.who === ''} onChange={(ev) => save({ ...v, position: ev.target.value })}>
+                    <option value=""> </option>
+                    {Object.entries(POSITIONS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                    <option value="other">Other</option>
+                  </select>
+                  {v.position === 'other' && <input aria-label="Position" value={v.positionText} placeholder="Type a position" onChange={(ev) => save({ ...v, positionText: ev.target.value })} />}
+                </label>
+                {v.who === 'other' && (
+                  <label className="wiz-check presiding-check">
+                    <input type="checkbox" checked={!!v.presiding} onChange={(ev) => save({ ...v, presiding: ev.target.checked })} /> Presiding?
+                  </label>
+                )}
+                {!isNew && <button type="button" className="danger" aria-label="Remove this visiting leader" onClick={() => set('visitors', answers.visitors.filter((_, j) => j !== i))}>✕</button>}
+              </div>
+            )
+          })}
 
           <h3 className="wiz-section">Announcements</h3>
           {pulled('announcements', 'Announcements', 'Event, date, time, location, what to bring')}
@@ -269,20 +385,52 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
           <h3 className="wiz-section">Prayers and Speakers</h3>
           {sorted.length === 0 && <p className="muted small">Nothing on the program yet. Add prayers and speakers on the Sacrament tab.</p>}
           {(() => {
-            const titleSelect = (e: SacramentEntry) => {
+            const isSpeaker = (e: SacramentEntry) => ['youth-speaker', 'adult-speaker', 'speaker'].includes(e.role)
+            const personRow = (e: SacramentEntry) => {
               const n = named[e.id]
-              const chosen = answers.titles[e.id] ?? defaultTitle(n.name, n.group) ?? ''
+              const chosen = answers.titles[e.id] ?? defaultTitle(n.name, n.group, e.details?.affiliation) ?? ''
+              if (changing === e.id) {
+                return (
+                  <div className="change-row">
+                    {e.role === 'youth-speaker' ? (
+                      <select autoFocus value={changeTo} onChange={(ev) => setChangeTo(ev.target.value)} aria-label="Choose a youth">
+                        <option value="">Choose a youth</option>
+                        {youthByLastSpoke(youth, [], '').map(({ youth: y }) => <option key={y.id} value={y.id}>{y.name}</option>)}
+                      </select>
+                    ) : (
+                      <input autoFocus list={e.role === 'speaker' ? undefined : 'wiz-people'} value={changeTo} placeholder="Type or choose a name" onChange={(ev) => setChangeTo(ev.target.value)} />
+                    )}
+                    <button type="button" className="primary" onClick={() => changePerson(e)}>Save</button>
+                    <button type="button" onClick={() => { setChanging(null); setPartError('') }}>Cancel</button>
+                  </div>
+                )
+              }
               return (
-                <label className="title-pick">
-                  <select value={chosen} onChange={(ev) => set('titles', { ...answers.titles, [e.id]: ev.target.value })} aria-label={`Title for ${n.name}`}>
-                    <option value=""> </option>
-                    {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <span>{n.name || 'Unknown'}<small className="muted">{ROLE_LABEL[e.role]}</small></span>
-                </label>
+                <>
+                  <label className="title-pick">
+                    <select value={chosen} onChange={(ev) => set('titles', { ...answers.titles, [e.id]: ev.target.value })} aria-label={`Title for ${n.name}`}>
+                      <option value=""> </option>
+                      {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      {isSpeaker(e) && <option value={YOUTH_SPEAKER}>{YOUTH_SPEAKER}</option>}
+                      {isSpeaker(e) && <option value={HIGH_COUNCILOR}>{HIGH_COUNCILOR}</option>}
+                    </select>
+                    <span>{n.name || 'Unknown'}<small className="muted">{ROLE_LABEL[e.role]}</small></span>
+                  </label>
+                  <span className="part-actions">
+                    <button type="button" aria-label={`Change who is ${ROLE_LABEL[e.role]}`} title="Change who" onClick={() => { setChanging(e.id); setChangeTo(e.role === 'youth-speaker' ? e.youthId ?? '' : n.name); setPartError('') }}><PencilIcon /></button>
+                    <button type="button" className="danger" aria-label={`Remove ${n.name}`} title="Remove" onClick={() => removePart(e)}>✕</button>
+                  </span>
+                </>
               )
             }
-            const fixed = (e?: SacramentEntry) => e && <div className="speaker-row fixed-row">{named[e.id] && titleSelect(e)}</div>
+            const fixed = (e?: SacramentEntry) => e && <div className="speaker-row fixed-row">{named[e.id] && personRow(e)}</div>
+            const kinds: { role: SacramentRole; label: string }[] = [
+              ...(opening ? [] : [{ role: 'invocation' as const, label: 'Opening Prayer' }]),
+              ...(closing ? [] : [{ role: 'benediction' as const, label: 'Closing Prayer' }]),
+              { role: 'youth-speaker', label: 'Youth Speaker' },
+              { role: 'adult-speaker', label: 'Adult Speaker' },
+              { role: 'speaker', label: 'Visiting Speaker' },
+            ]
             return (
               <>
                 {fixed(opening)}
@@ -293,7 +441,7 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
                   render={(e, handle) => (
                     <div className="speaker-row">
                       {handle}
-                      {named[e.id] ? titleSelect(e) : (
+                      {named[e.id] ? personRow(e) : (
                         <div className="title-pick">
                           <span className="kind-tag">{ROLE_LABEL[e.role]}</span>
                           <span>{describeEntry(e).headline}{describeEntry(e).sub && <small className="muted">{describeEntry(e).sub}</small>}</span>
@@ -303,6 +451,44 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
                   )}
                 />
                 {fixed(closing)}
+                {partError && !addingPart && <p role="alert" className="form-error">{partError}</p>}
+                <datalist id="wiz-affiliations"><option value="High Councilor" /></datalist>
+                <datalist id="wiz-people">
+                  {members.map((m) => <option key={m.id} value={m.name} />)}
+                  {youth.map((y) => <option key={y.id} value={y.name} />)}
+                </datalist>
+                {addingPart ? (
+                  <div className="music-form">
+                    <label>Add
+                      <select value={partKind} onChange={(ev) => { setPartKind(ev.target.value as SacramentRole); setPartError('') }}>
+                        {kinds.map((k) => <option key={k.role} value={k.role}>{k.label}</option>)}
+                      </select>
+                    </label>
+                    {partKind === 'youth-speaker' ? (
+                      <label>Youth
+                        <select value={part.youth} onChange={(ev) => setPart({ ...part, youth: ev.target.value })}>
+                          <option value="">{youth.length ? 'Choose a youth' : 'Add youth in Setup first'}</option>
+                          {youthByLastSpoke(youth, [], '').map(({ youth: y }) => <option key={y.id} value={y.id}>{y.name}</option>)}
+                        </select>
+                      </label>
+                    ) : (
+                      <label>Name
+                        <input list={partKind === 'speaker' ? undefined : 'wiz-people'} value={part.name} placeholder="Type or choose a name" onChange={(ev) => setPart({ ...part, name: ev.target.value })} />
+                      </label>
+                    )}
+                    {partKind === 'speaker' && (
+                      <label>Who they are (e.g. High Councilor)<input list="wiz-affiliations" value={part.affiliation} onChange={(ev) => setPart({ ...part, affiliation: ev.target.value })} /></label>
+                    )}
+                    {partError && <p role="alert" className="form-error">{partError}</p>}
+                    <div className="row actions">
+                      <button type="button" className="primary" onClick={addPartEntry}>Add</button>
+                      <button type="button" onClick={() => { setAddingPart(false); setPartError('') }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => { setAddingPart(true); setPartKind(kinds[0].role); setPartError('') }}>+ Add Speaker or Prayer</button>
+                )}
+                <p className="muted small">Changes here also update the Sacrament tab, so the speaker list and “not asked lately” stay in step.</p>
               </>
             )
           })()}
@@ -311,6 +497,10 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
         <div className="script-column">
         <div className="script-edit-bar no-print">
           {manual && !editing && <span className="muted small">Edited by hand for this Sunday.</span>}
+          <button type="button" role="switch" aria-checked={dyslexic} className={`switch ${dyslexic ? 'on' : ''}`} onClick={() => set('dyslexic', !dyslexic)}>
+            <span className="switch-label">Dyslexia font</span>
+            <span className="track" aria-hidden="true"><span className="thumb" /></span>
+          </button>
           <button type="button" className={editing ? 'primary' : ''} onClick={() => setEditing(!editing)}>
             {editing ? 'Done' : <><PencilIcon /> Edit</>}
           </button>
@@ -321,7 +511,7 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
             <button type="button" className="link-btn" onClick={() => { setManual(null); setEditing(false) }}>Reset to the standard script</button>
           </p>
         )}
-        <article className={`script-page${editing ? ' is-editing' : ''}`}>
+        <article className={`script-page${editing ? ' is-editing' : ''}${dyslexic ? ' dys-font' : ''}`}>
           {blocks.map((b, i) => {
             if (editing) {
               const value = b.kind === 'list' ? b.items.join('\n') : b.text

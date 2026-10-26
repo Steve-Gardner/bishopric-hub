@@ -1,4 +1,5 @@
 import { format, parseISO } from 'date-fns'
+import { findByName } from './nicknames'
 import { describeEntry, sortEntries } from './sacrament'
 import type { SacramentEntry } from './types'
 
@@ -9,10 +10,14 @@ export interface HymnAnswer { number: string; title: string }
 
 export const WARD_NAME = 'Ben Lomond 5th'
 export const TITLES = ['Brother', 'Sister', 'President'] as const
+// Offered to speakers only: they are introduced as "our youth speaker, Jamie Cruz" instead of with a title.
+export const YOUTH_SPEAKER = 'Youth Speaker'
+// Also for speakers: "Brother John Smith from the High Council", then "Brother Smith". They are also recognized in the welcome.
+export const HIGH_COUNCILOR = 'High Councilor'
 
 export interface ScriptAnswers {
   presiding: string // "Bishop Name"; blank until known
-  visiting: string // who to recognize, if known ahead of time; otherwise the script leaves a blank to write it in
+  visitors: Visitor[] // visiting leaders to recognize, if known ahead of time; the script always leaves a blank to write one in
   pianist: string
   chorister: string
   announcements?: string // one per line; absent means "follow the Bishopric Agenda"
@@ -24,8 +29,67 @@ export interface ScriptAnswers {
   stakeBusiness: boolean
   stakeWho: string // who has the stake business, if known
   babyBlessings: boolean
+  dyslexic?: boolean // print in the dyslexia-friendly font; absent means on when the bishop conducts
   babies: string[] // the children's names; a blank entry prints as a blank to write in
   titles: Record<string, string> // how to address a person, by entry id: Brother, Sister, President, or '' to say the name as entered
+}
+
+// The stake leaders who visit regularly, with the position each one holds. Anyone else is entered as "Other".
+export const STAKE_LEADERS = [
+  { key: 'godfrey', name: 'Dave Godfrey', position: 'high' },
+  { key: 'dalton', name: 'President Dalton', position: 'sp' },
+  { key: 'barker', name: 'President Barker', position: 'c1' },
+  { key: 'benson', name: 'President Benson', position: 'c2' },
+] as const
+
+export const POSITIONS = {
+  high: 'High Council',
+  sp: 'Stake President',
+  c1: '1st Counselor in the Stake Presidency',
+  c2: '2nd Counselor in the Stake Presidency',
+} as const
+
+export interface Visitor {
+  who: string // a STAKE_LEADERS key, or 'other' to type a name
+  name: string // used when who is 'other'
+  position: string // a POSITIONS key, 'other' to type one, or '' for none
+  positionText: string
+  presiding?: boolean // only for 'other': they preside, so the welcome names them instead of the bishop
+}
+
+export const emptyVisitor = (): Visitor => ({ who: '', name: '', position: '', positionText: '' })
+
+// How one visiting leader is introduced, or '' when nobody has been entered for the row.
+function visitorText(v: Visitor): string {
+  const leader = STAKE_LEADERS.find((l) => l.key === v.who)
+  const name = leader ? leader.name : v.name.trim()
+  if (!name) return ''
+  switch (v.position) {
+    case 'high': return `${name} from the Stake High Council`
+    case 'sp': return `${name}, our Stake President`
+    case 'c1': return `${name}, First Counselor in the Stake Presidency`
+    case 'c2': return `${name}, Second Counselor in the Stake Presidency`
+    case 'other': return v.positionText.trim() ? `${name}, ${v.positionText.trim()}` : name
+    default: return name
+  }
+}
+
+// Seniority among visiting leaders: Stake President, 1st and 2nd Counselor, high councilors (Dave Godfrey first),
+// then anyone else, in the order entered.
+const rankOf = (v: Visitor): number => {
+  const pos = STAKE_LEADERS.find((l) => l.key === v.who)?.position ?? v.position
+  return pos === 'sp' ? 1 : pos === 'c1' ? 2 : pos === 'c2' ? 3 : pos === 'high' ? (v.who === 'godfrey' ? 4 : 5) : 6
+}
+
+// Who presides, and who is recognized after that. Someone marked presiding always presides; otherwise the most
+// senior member of the stake presidency does. High councilors and everyone else are only recognized.
+export function sortVisitors(visitors: Visitor[]): { presider?: Visitor; recognized: Visitor[] } {
+  const entered = visitors.filter((v) => visitorText(v))
+  const marked = entered.find((v) => v.presiding)
+  const senior = [...entered].sort((a, b) => rankOf(a) - rankOf(b)).find((v) => rankOf(v) <= 3)
+  const presider = marked ?? senior
+  const recognized = entered.filter((v) => v !== presider).map((v, i) => ({ v, i })).sort((a, b) => rankOf(a.v) - rankOf(b.v) || a.i - b.i).map((x) => x.v)
+  return { presider, recognized }
 }
 
 export const emptyHymn = (): HymnAnswer => ({ number: '', title: '' })
@@ -47,11 +111,13 @@ const hymnText = (h: HymnAnswer) => {
 const lastName = (name: string) => name.trim().split(/\s+/).at(-1) ?? ''
 
 const BLANK = '____________________'
+const stripTitle = (name: string) => name.trim().replace(/^(brother|sister|elder|patriarch|president|bishop|dr\.?)\s+/i, '')
 const hasTitle = (name: string) => /^(brother|sister|elder|patriarch|president|bishop|dr\.?)\s/i.test(name.trim())
 
 // The title a person is addressed with unless someone chose another: known for youth (from their group) and for
 // visitors entered with a title; otherwise undefined, because it can't be worked out from a name.
-export function defaultTitle(name: string, group?: 'young-men' | 'young-women'): string | undefined {
+export function defaultTitle(name: string, group?: 'young-men' | 'young-women', affiliation?: string): string | undefined {
+  if (affiliation && /high/i.test(affiliation)) return HIGH_COUNCILOR
   if (group) return group === 'young-men' ? 'Brother' : 'Sister'
   return hasTitle(name) ? '' : undefined
 }
@@ -73,6 +139,7 @@ export interface ScriptInput {
   date: string // the Sunday, yyyy-MM-dd
   answers: ScriptAnswers
   conducting: string // an empty string when no one is set
+  bishopConducting: boolean // the bishop both presides and conducts, so he introduces himself once
   entries: SacramentEntry[]
   people: Record<string, ProgramPerson> // by entry id, for prayers and speakers
 }
@@ -84,8 +151,19 @@ function said(input: ScriptInput, e: SacramentEntry, seen: Set<string>): string 
   const p = input.people[e.id]
   const name = (p?.name || e.details?.name || '').trim()
   if (!name) return '[Name]'
-  const title = input.answers.titles[e.id] ?? defaultTitle(name, p?.group)
+  const title = input.answers.titles[e.id] ?? defaultTitle(name, p?.group, e.details?.affiliation)
   if (!title) return name
+  if (title === HIGH_COUNCILOR) {
+    const bare = stripTitle(name)
+    const again = seen.has(name.toLowerCase())
+    seen.add(name.toLowerCase())
+    return again ? `Brother ${lastName(bare)}` : `Brother ${bare} from the High Council`
+  }
+  if (title === YOUTH_SPEAKER) {
+    const again = seen.has(name.toLowerCase())
+    seen.add(name.toLowerCase())
+    return again ? name : `our youth speaker, ${name}`
+  }
   const first = !seen.has(name.toLowerCase())
   seen.add(name.toLowerCase())
   return first ? `${title} ${name}` : `${title} ${lastName(name)}`
@@ -104,17 +182,42 @@ export function buildScript(input: ScriptInput): Block[] {
 
   // Welcome
   out.push({ kind: 'heading', text: 'Welcome' })
+  const bishop = a.presiding.trim() || "[Bishop's Name]"
+  // A speaker marked High Councilor is also recognized in the welcome, unless already entered as a visiting leader.
+  const sameName = (x: string, y: string) => x.toLowerCase() === y.toLowerCase() || !!findByName([{ name: x }], y)
+  const entered = a.visitors.map((v) => STAKE_LEADERS.find((l) => l.key === v.who)?.name ?? v.name)
+  const councilors: Visitor[] = []
+  for (const e of program) {
+    const p = input.people[e.id]
+    const name = stripTitle((p?.name || e.details?.name || '').trim())
+    if (!name || (a.titles[e.id] ?? defaultTitle(name, p?.group, e.details?.affiliation)) !== HIGH_COUNCILOR) continue
+    if (entered.some((x) => sameName(x, name))) continue
+    entered.push(name)
+    const leader = STAKE_LEADERS.find((l) => l.position === 'high' && sameName(l.name, name))
+    councilors.push({ who: leader ? leader.key : 'other', name, position: 'high', positionText: '' })
+  }
+  const { presider, recognized } = sortVisitors([...a.visitors, ...councilors])
+  const presides = presider ? visitorText(presider) : ''
+  // A visiting presider replaces the bishop as the one presiding, so the welcome only names who is conducting.
+  const who = input.bishopConducting ? `I am ${bishop}.` : `I am ${input.conducting.trim() || "[Conducting Member's Name]"}, and I have been asked to conduct.`
+  const intro = presides
+    ? `${who} We recognize ${presides}${presides.includes(',') ? ',' : ''} who presides today.`
+    : input.bishopConducting
+      ? who
+      : `I am ${input.conducting.trim() || "[Conducting Member's Name]"}, and ${bishop}, who is presiding at today's meeting, has asked me to conduct.`
   out.push({
     kind: 'say',
     text:
       `Brothers and Sisters, we welcome you to the sacrament meeting of the ${WARD_NAME} Ward. ` +
-      `I am ${input.conducting.trim() || "[Conducting Member's Name]"}, and ${a.presiding.trim() || "[Bishop's Name]"}, ` +
-      `who is presiding at today's meeting, has asked me to conduct. We welcome any new members or visitors that are here with us today. ` +
+      `${intro} We welcome any new members or visitors that are here with us today. ` +
       `Thank you for worshiping our Savior, Jesus Christ with us today.`,
   })
+  const known = recognized.map(visitorText).filter(Boolean)
+  const list = known.length <= 2 ? known.join(' and ') : `${known.slice(0, -1).join('; ')}; and ${known.at(-1)}`
   out.push({
     kind: 'say',
-    text: a.visiting.trim() ? `We also recognize ${a.visiting.trim().replace(/\.$/, '')}.` : `We also recognize ${BLANK} from the ${BLANK}.`,
+    // A blank is always left to write in anyone who turns up unannounced.
+    text: known.length ? `We also recognize ${list}, and ${BLANK}.` : `We also recognize ${BLANK} from the ${BLANK}.`,
   })
   const pianist = a.pianist.trim()
   const leader = a.chorister.trim()
@@ -256,7 +359,7 @@ const isSpeakerRole = (role: string) => role.endsWith('speaker')
 export function defaultAnswers(entries: SacramentEntry[], base: Partial<ScriptAnswers>): ScriptAnswers {
   const hymns = sortEntries(entries).filter((e) => e.role === 'hymn').map((e) => ({ number: e.details?.number ?? '', title: e.details?.title ?? '' }))
   return {
-    presiding: '', visiting: '', pianist: '', chorister: '',
+    presiding: '', visitors: [], pianist: '', chorister: '',
     stakeBusiness: false, stakeWho: '', babyBlessings: false, babies: [''], titles: {},
     ...base,
     openingHymn: base.openingHymn ?? hymns[0] ?? emptyHymn(),
