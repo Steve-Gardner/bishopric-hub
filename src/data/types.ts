@@ -274,9 +274,9 @@ export interface TeachingAssignment {
   lesson?: string // e.g. "SFY 4", or a note like "Ward Conference"
 }
 
-// A ward member kept off the "who to ask to speak" list, with the reason (homebound, health, does not attend).
+// A ward member kept off the "who to ask to speak" list.
 export interface SpeakerExclusion {
   id: string // the member's id
-  reason: string
+  reason?: string // older rows recorded why; it is no longer asked
   date: string // yyyy-MM-dd
 }

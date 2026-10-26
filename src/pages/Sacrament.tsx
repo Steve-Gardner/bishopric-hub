@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { addDays, format, parseISO } from 'date-fns'
 import Fold from '../components/Fold'
+import { useRemembered } from '../components/useRemembered'
 import { useSpecialDates } from '../components/useSpecialDates'
 import { nextSundayIso } from '../data/format'
 import { specialMeeting } from '../data/special'
@@ -26,9 +27,8 @@ export default function Sacrament() {
   const [sundays, setSundays] = useState<SundayNote[]>([]) // the Conducting Schedule's changes
   const { names } = useStaff()
   const [ahead, setAhead] = useState(UPCOMING_STEP)
-  // Always opens on Meetings.
-  const [tab, setTab] = useState<Tab>('meetings')
-  const choose = setTab
+  // Opens on Meetings, and stays on the chosen tab when a save redraws the page.
+  const [tab, choose] = useRemembered<Tab>('sacrament-tab', 'meetings')
   const { values: special } = useSpecialDates()
 
   const reload = useCallback(async () => {

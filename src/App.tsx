@@ -1,4 +1,5 @@
-import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { useRef } from 'react'
+import { HashRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import Agenda from './pages/Agenda'
 import Calendar from './pages/calendar/Calendar'
 import FontToggle from './components/FontToggle'
@@ -13,6 +14,7 @@ import { useDataVersion } from './data/cloud'
 import PullToRefresh from './components/PullToRefresh'
 import { useKeepScroll } from './components/useKeepScroll'
 import { useModalScrollLock } from './components/useModalScrollLock'
+import { forgetRemembered } from './components/useRemembered'
 
 // House icon in the header, shown on every screen.
 function HomeIcon() {
@@ -26,6 +28,14 @@ function HomeIcon() {
   )
 }
 
+// Choices a screen remembers across a data refresh are forgotten when the person goes to a different screen.
+function ForgetOnNavigate() {
+  const { pathname } = useLocation()
+  const last = useRef(pathname)
+  if (last.current !== pathname) { forgetRemembered(); last.current = pathname } // while drawing, so it happens before the next screen reads them
+  return null
+}
+
 export default function App() {
   const dataVersion = useDataVersion() // changes when another phone saves something, so the page loads again
   useKeepScroll(dataVersion)
@@ -34,6 +44,7 @@ export default function App() {
     <HashRouter>
       <Splash />
       <PullToRefresh />
+      <ForgetOnNavigate />
       <header className="topbar">
         <div className="topline">
           <NavLink to="/" end className="brand">5th Ward Bishopric Hub</NavLink>

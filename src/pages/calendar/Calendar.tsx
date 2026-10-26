@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import PencilIcon from '../../components/PencilIcon'
+import { useRemembered } from '../../components/useRemembered'
 import { useDismiss } from '../../components/useDismiss'
 import { useScheduleData } from '../../components/useScheduleData'
 import { readMyRole } from '../../components/useMyRole'
@@ -40,8 +41,8 @@ export default function Calendar() {
   useDismiss(addRef, addOpen, () => setAddOpen(false)) // close on a tap elsewhere or Escape
   const linked = params.get('date')
   const linkedDate = linked && isValid(parseISO(linked)) ? parseISO(linked) : null
-  const [month, setMonth] = useState(linkedDate ?? new Date())
-  const [selected, setSelected] = useState(linkedDate ?? new Date())
+  const [month, setMonth] = useRemembered('calendar-month', linkedDate ?? new Date())
+  const [selected, setSelected] = useRemembered('calendar-selected', linkedDate ?? new Date())
   useEffect(() => {
     if (!linkedDate) return
     setSelected(linkedDate)
@@ -53,7 +54,7 @@ export default function Calendar() {
 
   // Show only one bishopric member's items for the selected day. It starts on Everyone, except for the bishop
   // (set under This Device in Setup), who starts on his own schedule. Changing it lasts until the page is left.
-  const [member, setMember] = useState<'all' | RoleKey>(() => (readMyRole() === 'bishop' ? 'bishop' : 'all'))
+  const [member, setMember] = useRemembered<'all' | RoleKey>('calendar-member', () => (readMyRole() === 'bishop' ? 'bishop' : 'all'))
   const chooseMember = setMember
 
   const [appts, setAppts] = useState<Appointment[]>([])

@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { Link } from 'react-router-dom'
 import Fold from '../../components/Fold'
+import { useRemembered } from '../../components/useRemembered'
 import {
   PRAYER_ROLES, SPEAKING_ROLES, SPOKE_BUCKETS, lastNameKey, spokeBucket, youthByLastSpoke, type SpokeBucket,
 } from '../../data/sacrament'
 import { speakerExclusionStore } from '../../data/store'
 import type { Member, Youth, SacramentEntry, SacramentRole, SpeakerExclusion } from '../../data/types'
 
-const REASONS = ['Homebound', 'Health issues', 'Does not attend', 'Other']
 const BAND_COLOR: Record<SpokeBucket, string> = { year: '#c0392b', 'two-years': '#e08a1e', older: '#d4b106' }
 
 type Sort = 'date' | 'name'
@@ -22,15 +22,15 @@ interface Props {
 // When each person last spoke or prayed, to help decide who to ask next. Adults can be narrowed by how long
 // ago they spoke; the youth list always shows the whole Youth Roster. Every list sorts by date or last name.
 export default function SpeakersSection({ members, youth, entries }: Props) {
-  const [bucket, setBucket] = useState<SpokeBucket>('older')
-  const [sort, setSort] = useState<Sort>('date')
+  const [bucket, setBucket] = useRemembered<SpokeBucket>('speakers-bucket', 'older')
+  const [sort, setSort] = useRemembered<Sort>('speakers-sort', 'date')
   const [excluded, setExcluded] = useState<SpeakerExclusion[]>([])
   const [hiding, setHiding] = useState<string | null>(null)
   const loadExcluded = useCallback(() => speakerExclusionStore.list().then(setExcluded), [])
   useEffect(() => { loadExcluded() }, [loadExcluded])
   const excludedIds = useMemo(() => new Set(excluded.map((x) => x.id)), [excluded])
-  const hide = async (id: string, reason: string) => {
-    await speakerExclusionStore.save({ id, reason, date: format(new Date(), 'yyyy-MM-dd') })
+  const hide = async (id: string) => {
+    await speakerExclusionStore.save({ id, date: format(new Date(), 'yyyy-MM-dd') })
     setHiding(null)
     loadExcluded()
   }
@@ -132,8 +132,9 @@ export default function SpeakersSection({ members, youth, entries }: Props) {
                 </span>
                 {hiding === r.m.id && (
                   <span style={{ flexBasis: '100%' }} className="row actions">
-                    <span className="muted small">Hide from this list because:</span>
-                    {REASONS.map((x) => <button key={x} onClick={() => hide(r.m.id, x)}>{x}</button>)}
+                    <span className="muted small">Hide {r.m.name} from this list?</span>
+                    <button className="primary" onClick={() => hide(r.m.id)}>Hide</button>
+                    <button onClick={() => setHiding(null)}>Cancel</button>
                   </span>
                 )}
               </li>
@@ -152,7 +153,7 @@ export default function SpeakersSection({ members, youth, entries }: Props) {
             <ul className="plain">
               {excluded.map((x) => (
                 <li key={x.id}>
-                  <span><strong>{members.find((m) => m.id === x.id)?.name ?? 'Unknown'}</strong> <span className="muted small">{x.reason}</span></span>
+                  <strong>{members.find((m) => m.id === x.id)?.name ?? 'Unknown'}</strong>
                   <button onClick={() => restore(x.id)}>Restore</button>
                 </li>
               ))}
