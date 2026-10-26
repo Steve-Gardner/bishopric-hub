@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { addDays, format, getDay } from 'date-fns'
 import AttendeePicker from '../../components/AttendeePicker'
 import NameSuggest from '../../components/NameSuggest'
@@ -21,6 +21,8 @@ type Repeat = 'none' | 'weekly' | 'monthly'
 interface Props {
   names: string[] // ward members, suggested while typing an interview's name
   onCreated: (date: string) => void // the day it was booked on, so the page can show it
+  autoStart?: boolean // begin straight away, as if the big red button had been tapped
+  onStarted?: () => void
 }
 
 const COUNSELORS: RoleKey[] = ['first-counselor', 'second-counselor']
@@ -30,12 +32,13 @@ const addMin = (t: string, m: number) => { const [h, mm] = t.split(':').map(Numb
 // A big red button starts it. First question: interview or meeting? An interview needs a name, a length, and
 // whether it is with the bishop or a counselor; then the open times are listed and one tap books it. A meeting
 // needs a title, a length, who attends (everyone to start with), whether it repeats, and a day and time.
-export default function BookingWizard({ names, onCreated }: Props) {
+export default function BookingWizard({ names, onCreated, autoStart, onStarted }: Props) {
   const { names: staff } = useStaff()
   const { block, dialog } = useBlocker()
   const [withWho, setWithWho] = useState<'bishop' | 'counselor'>('bishop')
   const [when, setWhen] = useState({ date: nextSunday(), time: '09:30' })
   const [step, setStep] = useState(-1) // -1: just the button
+  useEffect(() => { if (autoStart) { setStep((s) => (s === -1 ? 0 : s)); onStarted?.() } }, [autoStart]) // eslint-disable-line react-hooks/exhaustive-deps
   const [kind, setKind] = useState<Kind>('interview')
   const [name, setName] = useState('') // the interview's person, or the meeting's title
   const [minutes, setMinutes] = useState(0)

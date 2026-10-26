@@ -734,3 +734,4 @@ button.board-event { text-align: left; cursor: pointer; font: inherit; }
 .script-wizard .wiz-section:first-of-type { margin-top: 10px; }
 .title-pick small { font-weight: 400; margin-left: 4px; }
 .stake-name { margin: 6px 0 0 24px; }
+.fold { scroll-margin-top: 110px; }
