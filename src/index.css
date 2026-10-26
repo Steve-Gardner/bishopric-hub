@@ -795,3 +795,7 @@ button.board-event { text-align: left; cursor: pointer; font: inherit; }
 .splat p { font-size: 1.2rem; line-height: 1.35; padding: 0 14%; text-wrap: balance; transform: translate(2%, -2%); text-shadow: 0 1px 3px #000a; }
 @keyframes splat-in { from { transform: scale(.2) rotate(-12deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .splat { animation: none; } }
+.script-wizard .visitor-box { position: relative; border: 1px dashed var(--line); border-radius: 10px; padding: 10px 10px 6px; margin: 8px 0; }
+.script-wizard .visitor-box .visitor-x { position: absolute; top: 4px; right: 4px; margin: 0; padding: 0 7px; line-height: 1.4; }
+.script-wizard .visitor-box > label:first-child { padding-right: 28px; }
+.script-wizard .visitor-add { width: 34px; height: 34px; padding: 0; margin: 4px 0; font-size: 1.3rem; line-height: 1; border-radius: 50%; }

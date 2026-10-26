@@ -41,6 +41,8 @@ function Marked({ text }: { text: string }) {
 // finished script below it, ready to print or save as a PDF.
 export default function ScriptSheet({ date, entries, members, youth, conducting, leaders, onConducting, onChange, onClose }: Props) {
   const [answers, setAnswers] = useState<ScriptAnswers | null>(null)
+  const [extraRows, setExtraRows] = useState(0) // empty boxes added with + for another visiting leader
+  const nameOfVisitor = (v: Visitor) => STAKE_LEADERS.find((l) => l.key === v.who)?.name ?? v.name.trim()
   type Pulled = { announcements: string; releases: string; sustainings: string }
   // This Sunday's Sacrament Announcements, Releases and Sustainings on the Bishopric Agenda
   const [agenda, setAgenda] = useState<Pulled>({ announcements: '', releases: '', sustainings: '' })
@@ -297,45 +299,64 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
             </div>
           )}
           <h4 className="wiz-sub">Visiting leaders to recognize (if known)</h4>
-          {[...answers.visitors, emptyVisitor()].map((v, i) => {
-            const isNew = i === answers.visitors.length
-            // Only rows with someone chosen are kept; a fresh empty row always follows for the next leader.
-            const save = (next: Visitor) => {
-              const list = isNew ? [...answers.visitors, next] : answers.visitors.map((x, j) => (j === i ? next : x))
-              // Only one person can preside: checking one clears the rest.
-              const only = list.map((x) => (next.presiding && x !== next ? { ...x, presiding: false } : x))
-              set('visitors', only.filter((x) => x.who !== ''))
-            }
+          {(() => {
+            // The first leader is chosen right away. More are added with the + button, one box each, so it is clear
+            // which one a ✕ removes. Only rows with someone chosen are kept in the answers; a new empty row waits here.
+            const blank = Math.max(extraRows, answers.visitors.length === 0 ? 1 : 0)
+            const rows = [...answers.visitors, ...Array.from({ length: blank }, emptyVisitor)]
+            const several = rows.length > 1
+            const last = rows[rows.length - 1]
             return (
-              <div className="visitor-row" key={i}>
-                <label>Name
-                  <select value={v.who} onChange={(ev) => {
-                    const leader = STAKE_LEADERS.find((l) => l.key === ev.target.value)
-                    save({ ...v, who: ev.target.value, position: leader ? leader.position : v.position })
-                  }}>
-                    <option value="">{isNew && i > 0 ? 'Add another' : 'Choose'}</option>
-                    {STAKE_LEADERS.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
-                    <option value="other">Other</option>
-                  </select>
-                  {v.who === 'other' && <input aria-label="Name" value={v.name} placeholder="Type a name" onChange={(ev) => save({ ...v, name: ev.target.value })} />}
-                </label>
-                <label>Position
-                  <select value={v.position} disabled={v.who === ''} onChange={(ev) => save({ ...v, position: ev.target.value })}>
-                    <option value=""> </option>
-                    {Object.entries(POSITIONS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-                    <option value="other">Other</option>
-                  </select>
-                  {v.position === 'other' && <input aria-label="Position" value={v.positionText} placeholder="Type a position" onChange={(ev) => save({ ...v, positionText: ev.target.value })} />}
-                </label>
-                {v.who === 'other' && (
-                  <label className="wiz-check presiding-check">
-                    <input type="checkbox" checked={!!v.presiding} onChange={(ev) => save({ ...v, presiding: ev.target.checked })} /> Presiding?
-                  </label>
+              <>
+                {rows.map((v, i) => {
+                  const isNew = i >= answers.visitors.length
+                  const save = (next: Visitor) => {
+                    const list = isNew ? [...answers.visitors, next] : answers.visitors.map((x, j) => (j === i ? next : x))
+                    // Only one person can preside: checking one clears the rest.
+                    const only = list.map((x) => (next.presiding && x !== next ? { ...x, presiding: false } : x))
+                    set('visitors', only.filter((x) => x.who !== ''))
+                    if (isNew && next.who !== '') setExtraRows(Math.max(0, extraRows - 1))
+                  }
+                  const remove = () => {
+                    if (isNew) setExtraRows(Math.max(0, extraRows - 1))
+                    else set('visitors', answers.visitors.filter((_, j) => j !== i))
+                  }
+                  return (
+                    <div className={`visitor-row ${several ? 'visitor-box' : ''}`} key={i}>
+                      <label>Name
+                        <select value={v.who} onChange={(ev) => {
+                          const leader = STAKE_LEADERS.find((l) => l.key === ev.target.value)
+                          save({ ...v, who: ev.target.value, position: leader ? leader.position : v.position })
+                        }}>
+                          <option value="">Choose</option>
+                          {STAKE_LEADERS.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
+                          <option value="other">Other</option>
+                        </select>
+                        {v.who === 'other' && <input aria-label="Name" value={v.name} placeholder="Type a name" onChange={(ev) => save({ ...v, name: ev.target.value })} />}
+                      </label>
+                      <label>Position
+                        <select value={v.position} disabled={v.who === ''} onChange={(ev) => save({ ...v, position: ev.target.value })}>
+                          <option value=""> </option>
+                          {Object.entries(POSITIONS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                          <option value="other">Other</option>
+                        </select>
+                        {v.position === 'other' && <input aria-label="Position" value={v.positionText} placeholder="Type a position" onChange={(ev) => save({ ...v, positionText: ev.target.value })} />}
+                      </label>
+                      {v.who === 'other' && (
+                        <label className="wiz-check presiding-check">
+                          <input type="checkbox" checked={!!v.presiding} onChange={(ev) => save({ ...v, presiding: ev.target.checked })} /> Presiding?
+                        </label>
+                      )}
+                      {(several || !isNew) && <button type="button" className="danger visitor-x" aria-label={`Remove ${nameOfVisitor(v) || 'this visiting leader'}`} onClick={remove}>✕</button>}
+                    </div>
+                  )
+                })}
+                {last.who !== '' && (
+                  <button type="button" className="visitor-add" aria-label="Add another visiting leader" title="Add another visiting leader" onClick={() => setExtraRows(extraRows + 1)}>+</button>
                 )}
-                {!isNew && <button type="button" className="danger" aria-label="Remove this visiting leader" onClick={() => set('visitors', answers.visitors.filter((_, j) => j !== i))}>✕</button>}
-              </div>
+              </>
             )
-          })}
+          })()}
 
           <h3 className="wiz-section">Announcements</h3>
           {pulled('announcements', 'Announcements', 'Event, date, time, location, what to bring')}
