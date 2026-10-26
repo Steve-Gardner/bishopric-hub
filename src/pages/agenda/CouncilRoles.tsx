@@ -41,7 +41,7 @@ export default function CouncilRoles({ roles, values, suggestions, onSave, onRes
       </div>
 
       {draft && (
-        <div className="modal" onClick={() => setDraft(null)}>
+        <div className="modal modal-top" onClick={() => setDraft(null)}>
           <form className="sheet" onClick={(ev) => ev.stopPropagation()} onSubmit={(ev) => { ev.preventDefault(); save() }}>
             <h2>Meeting roles</h2>
             {roles.map(([key, label]) => (

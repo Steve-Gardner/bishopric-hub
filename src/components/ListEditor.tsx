@@ -106,7 +106,7 @@ export default function ListEditor({ listKey, title, placeholder = 'Add item', c
         <button style={{ marginTop: 8 }} onClick={clearDone}>Clear {doneCount} completed</button>
       )}
       {noting && (
-        <div className="modal" onClick={() => setNoting(null)}>
+        <div className="modal modal-top" onClick={() => setNoting(null)}>
           <form className="sheet" onClick={(ev) => ev.stopPropagation()} onSubmit={(ev) => { ev.preventDefault(); saveNotes() }}>
             <h2>Notes: {noting.text}</h2>
             <label>

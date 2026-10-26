@@ -83,7 +83,7 @@ export default function CouncilNeeds({ onChange }: { onChange: () => void }) {
       <p className="muted small">The list is kept in the <Link to="/agenda">Bishopric Meeting agenda</Link>. The bishopric's private notes are not shown here. Notes you add here are visible to the bishopric.</p>
 
       {noting && (
-        <div className="modal" onClick={() => setNoting(null)}>
+        <div className="modal modal-top" onClick={() => setNoting(null)}>
           <form className="sheet" onClick={(ev) => ev.stopPropagation()} onSubmit={(ev) => { ev.preventDefault(); saveNotes() }}>
             <h2>Notes: {noting.name}</h2>
             <label>

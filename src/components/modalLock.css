@@ -1,0 +1,6 @@
+/* A popup is open: hold the page still behind it */
+body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }
+
+/* Note popups sit at the top of the screen, so the phone keyboard never covers them */
+.modal.modal-top { align-items: flex-start; padding: calc(env(safe-area-inset-top) + 12px) 8px 0; box-sizing: border-box; }
+.modal-top .sheet { border-radius: 14px; max-height: 70vh; border: 1px solid var(--accent-bright); }

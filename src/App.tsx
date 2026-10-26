@@ -12,6 +12,7 @@ import Splash from './components/Splash'
 import { useDataVersion } from './data/cloud'
 import PullToRefresh from './components/PullToRefresh'
 import { useKeepScroll } from './components/useKeepScroll'
+import { useModalScrollLock } from './components/useModalScrollLock'
 
 // House icon in the header, shown on every screen.
 function HomeIcon() {
@@ -28,6 +29,7 @@ function HomeIcon() {
 export default function App() {
   const dataVersion = useDataVersion() // changes when another phone saves something, so the page loads again
   useKeepScroll(dataVersion)
+  useModalScrollLock()
   return (
     <HashRouter>
       <Splash />
