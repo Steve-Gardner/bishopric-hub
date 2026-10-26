@@ -66,10 +66,13 @@ export default function Appointments({ date, setDate, appts, reload }: Props) {
         </div>
       </Fold>
 
-      <h2 className="todo-heading">To Do</h2>
-      <ListEditor listKey="set-apart" title="Need to be set apart" placeholder="Name and calling" checkable />
-      <ListEditor listKey="youth-interviews" title="Youth interviews to do" placeholder="Name" suggestions={youthNames} checkable />
-      <ListEditor listKey="followups" title="Other follow-ups" placeholder="Name and what's needed" checkable />
+      <Fold red id="appt-todo" title="To Do">
+        <div className="fold-pad">
+          <ListEditor listKey="set-apart" title="Need to be set apart" placeholder="Name and calling" checkable />
+          <ListEditor listKey="youth-interviews" title="Youth interviews to do" placeholder="Name" suggestions={youthNames} checkable />
+          <ListEditor listKey="followups" title="Other follow-ups" placeholder="Name and what's needed" checkable />
+        </div>
+      </Fold>
     </>
   )
 }
