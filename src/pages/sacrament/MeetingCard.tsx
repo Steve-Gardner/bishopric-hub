@@ -110,7 +110,7 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
         </h2>
         {special.canSchedule && <div className="head-actions">
           <button className="ghost-btn live" onClick={() => setScriptOpen(true)} aria-label={`Export the ${format(parseISO(date), 'MMM d')} conducting script`}>
-            Export Script<small>(Draft)</small>
+            Script
           </button>
         <div className="add-menu" ref={menuRef}>
           <button

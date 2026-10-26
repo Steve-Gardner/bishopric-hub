@@ -29,6 +29,9 @@ export interface ScriptAnswers {
   stakeBusiness: boolean
   stakeWho: string // who has the stake business, if known
   babyBlessings: boolean
+  bishopAbsent?: boolean // set when a counselor conducts: the first counselor then presides
+  firstAbsent?: boolean // ...and when he is away too, the second counselor
+  secondAbsent?: boolean
   dyslexic?: boolean // print in the dyslexia-friendly font; absent means on when the bishop conducts
   babies: string[] // the children's names; a blank entry prints as a blank to write in
   titles: Record<string, string> // how to address a person, by entry id: Brother, Sister, President, or '' to say the name as entered
@@ -65,7 +68,7 @@ function visitorText(v: Visitor): string {
   const name = leader ? leader.name : v.name.trim()
   if (!name) return ''
   switch (v.position) {
-    case 'high': return `${name} from the Stake High Council`
+    case 'high': return `${name} from the High Council`
     case 'sp': return `${name}, our Stake President`
     case 'c1': return `${name}, First Counselor in the Stake Presidency`
     case 'c2': return `${name}, Second Counselor in the Stake Presidency`
@@ -135,11 +138,14 @@ export interface ProgramPerson {
   group?: 'young-men' | 'young-women'
 }
 
+export type ConductorRole = 'bishop' | 'first' | 'second' | 'other'
+
 export interface ScriptInput {
   date: string // the Sunday, yyyy-MM-dd
   answers: ScriptAnswers
   conducting: string // an empty string when no one is set
-  bishopConducting: boolean // the bishop both presides and conducts, so he introduces himself once
+  conductorRole: ConductorRole
+  counselors: { first: string; second: string } // their names from Roles; '' until one has been entered
   entries: SacramentEntry[]
   people: Record<string, ProgramPerson> // by entry id, for prayers and speakers
 }
@@ -198,13 +204,26 @@ export function buildScript(input: ScriptInput): Block[] {
   }
   const { presider, recognized } = sortVisitors([...a.visitors, ...councilors])
   const presides = presider ? visitorText(presider) : ''
-  // A visiting presider replaces the bishop as the one presiding, so the welcome only names who is conducting.
-  const who = input.bishopConducting ? `I am ${bishop}.` : `I am ${input.conducting.trim() || "[Conducting Member's Name]"}, and I have been asked to conduct.`
-  const intro = presides
-    ? `${who} We recognize ${presides}${presides.includes(',') ? ',' : ''} who presides today.`
-    : input.bishopConducting
-      ? who
-      : `I am ${input.conducting.trim() || "[Conducting Member's Name]"}, and ${bishop}, who is presiding at today's meeting, has asked me to conduct.`
+  const role = input.conductorRole
+  const conductor = role === 'bishop' ? bishop : input.conducting.trim() || "[Conducting Member's Name]"
+  const first = input.counselors.first || "[First Counselor's Name]"
+  const second = input.counselors.second || "[Second Counselor's Name]"
+  // With no visiting presider, the bishop presides. When he is away it is the first counselor, and when both are
+  // away the second. (A bishop who is conducting is of course there.)
+  const bishopOut = role !== 'bishop' && !!a.bishopAbsent
+  const home: { role: ConductorRole; desc: string } | null =
+    !bishopOut ? { role: 'bishop', desc: bishop }
+    : !a.firstAbsent ? { role: 'first', desc: `${first}, First Counselor in the Bishopric` }
+    : !a.secondAbsent ? { role: 'second', desc: `${second}, Second Counselor in the Bishopric` }
+    : null
+  const comma = (d: string) => (d.includes(',') ? ',' : '')
+  const asked = `I am ${conductor}, and I have been asked to conduct.`
+  let intro: string
+  if (presides) intro = `${role === 'bishop' ? `I am ${bishop}.` : asked} We recognize ${presides}${comma(presides)} who presides today.`
+  else if (!home) intro = asked
+  else if (home.role === role) intro = `I am ${conductor}.`
+  else if (home.role === 'bishop') intro = `I am ${conductor}, and ${bishop}, who presides today, has asked me to conduct.`
+  else intro = `${asked} We recognize ${home.desc}, who presides today.`
   out.push({
     kind: 'say',
     text:
@@ -212,13 +231,24 @@ export function buildScript(input: ScriptInput): Block[] {
       `${intro} We welcome any new members or visitors that are here with us today. ` +
       `Thank you for worshiping our Savior, Jesus Christ with us today.`,
   })
-  const known = recognized.map(visitorText).filter(Boolean)
+
+  // Members of the High Council are named together: "A and B from the High Council".
+  const nameOfV = (v: Visitor) => STAKE_LEADERS.find((l) => l.key === v.who)?.name ?? v.name.trim()
+  const joinAnd = (xs: string[]) => (xs.length <= 2 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`)
+  const parts: string[] = []
+  const councilorNames: string[] = []
+  let councilAt = -1
+  for (const v of recognized) {
+    if (v.position === 'high') {
+      if (councilAt < 0) { councilAt = parts.length; parts.push('') }
+      councilorNames.push(nameOfV(v))
+    } else parts.push(visitorText(v))
+  }
+  if (councilAt >= 0) parts[councilAt] = `${joinAnd(councilorNames)} from the High Council`
+  const known = parts.filter(Boolean)
   const list = known.length <= 2 ? known.join(' and ') : `${known.slice(0, -1).join('; ')}; and ${known.at(-1)}`
-  out.push({
-    kind: 'say',
-    // A blank is always left to write in anyone who turns up unannounced.
-    text: known.length ? `We also recognize ${list}, and ${BLANK}.` : `We also recognize ${BLANK} from the ${BLANK}.`,
-  })
+  // With no one to name, a blank is left to write in whoever turns up.
+  out.push({ kind: 'say', text: known.length ? `We also recognize ${list}.` : `We also recognize ${BLANK} from the ${BLANK}.` })
   const pianist = a.pianist.trim()
   const leader = a.chorister.trim()
   if (pianist || leader) {

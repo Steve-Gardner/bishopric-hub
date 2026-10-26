@@ -7,7 +7,7 @@ import ReorderList from '../../components/ReorderList'
 import { ROLES } from '../../data/roles'
 import { ROLE_LABEL, describeEntry, nextOrder, sortEntries, youthByLastSpoke } from '../../data/sacrament'
 import { conflictFor, lookupPerson, placeEntry, resolvePerson, type Who } from '../../data/sacramentPeople'
-import { HIGH_COUNCILOR, POSITIONS, STAKE_LEADERS, TITLES, YOUTH_SPEAKER, buildScript, emptyVisitor, defaultAnswers, defaultTitle, type Block, type HymnAnswer, type ScriptAnswers, type Visitor } from '../../data/script'
+import { HIGH_COUNCILOR, POSITIONS, STAKE_LEADERS, TITLES, YOUTH_SPEAKER, buildScript, emptyVisitor, defaultAnswers, defaultTitle, type Block, type ConductorRole, type HymnAnswer, type ScriptAnswers, type Visitor } from '../../data/script'
 import { listStore, sacramentStore, settingStore } from '../../data/store'
 import type { Member, SacramentEntry, SacramentRole, Youth } from '../../data/types'
 
@@ -48,6 +48,7 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
   const [musicType, setMusicType] = useState<'musical' | 'choir'>('musical')
   const [music, setMusic] = useState({ performers: '', title: '' })
   const [addingMusic, setAddingMusic] = useState(false)
+  const [hosed, setHosed] = useState(false) // the whole bishopric is away
   // Adding, swapping or removing a speaker or prayer here changes the Sacrament program itself.
   const [addingPart, setAddingPart] = useState(false)
   const [partKind, setPartKind] = useState<SacramentRole>('youth-speaker')
@@ -201,6 +202,14 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
     setAnswers({ ...answers, titles: forgetTitle(e.id) })
     onChange()
   }
+  // Each "absent" box only appears once the one before it is checked; clearing one clears the ones after it.
+  const setAbsent = (k: 'bishopAbsent' | 'firstAbsent' | 'secondAbsent', on: boolean) => {
+    const next: ScriptAnswers = { ...answers, [k]: on || undefined }
+    if (!on && k === 'bishopAbsent') { next.firstAbsent = undefined; next.secondAbsent = undefined }
+    if (!on && k === 'firstAbsent') next.secondAbsent = undefined
+    setAnswers(next)
+    if (on && k === 'secondAbsent') setHosed(true)
+  }
   const set = <K extends keyof ScriptAnswers>(k: K, v: ScriptAnswers[K]) => setAnswers({ ...answers, [k]: v })
   const merged = {
     announcements: answers.announcements ?? agenda.announcements,
@@ -238,9 +247,11 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
   // The bishop presides: his name from Roles, once one has been entered there.
   const bishop = leaders[0] ?? ''
   const presiding = bishop && bishop !== ROLES[0].label ? `Bishop ${bishop.replace(/^Bishop\s+/i, '')}` : ''
-  const bishopConducting = !!leaders[0] && conducting === leaders[0]
+  const conductorRole: ConductorRole = !conducting ? 'other' : conducting === leaders[0] ? 'bishop' : conducting === leaders[1] ? 'first' : conducting === leaders[2] ? 'second' : 'other'
+  const bishopConducting = conductorRole === 'bishop'
+  const nameIn = (i: number) => (leaders[i] && leaders[i] !== ROLES[i].label ? leaders[i] : '')
   const dyslexic = answers.dyslexic ?? bishopConducting // on for the bishop unless someone turns it off
-  const standard = buildScript({ date, bishopConducting, answers: { ...answers, ...merged, presiding }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
+  const standard = buildScript({ date, conductorRole, counselors: { first: nameIn(1), second: nameIn(2) }, answers: { ...answers, ...merged, presiding }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
   const blocks = manual ?? standard
 
   return createPortal(
@@ -266,12 +277,25 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
             <select value={conducting} onChange={(ev) => {
               onConducting(ev.target.value)
               // The bishop's script is printed in the dyslexia-friendly font: choosing him turns it on, and choosing anyone else goes back to off.
-              setAnswers({ ...answers, dyslexic: ev.target.value === leaders[0] ? true : undefined })
+              const bishop = ev.target.value === leaders[0]
+              // The bishop is plainly there, so choosing him clears any "absent" boxes.
+              setAnswers({ ...answers, dyslexic: bishop ? true : undefined, ...(bishop ? { bishopAbsent: undefined, firstAbsent: undefined, secondAbsent: undefined } : {}) })
             }}>
               {!leaders.includes(conducting) && <option value={conducting}>{conducting || 'No one'}</option>}
               {leaders.map((l, i) => <option key={l} value={l}>{l}{l !== ROLES[i].label ? ` (${ROLES[i].label})` : ''}</option>)}
             </select>
           </label>
+          {(conductorRole === 'first' || conductorRole === 'second') && (
+            <div className="absent-checks">
+              <label className="wiz-check"><input type="checkbox" checked={!!answers.bishopAbsent} onChange={(ev) => setAbsent('bishopAbsent', ev.target.checked)} /> Bishop absent?</label>
+              {answers.bishopAbsent && (
+                <label className="wiz-check"><input type="checkbox" checked={!!answers.firstAbsent} onChange={(ev) => setAbsent('firstAbsent', ev.target.checked)} /> First counselor absent?</label>
+              )}
+              {answers.bishopAbsent && answers.firstAbsent && (
+                <label className="wiz-check"><input type="checkbox" checked={!!answers.secondAbsent} onChange={(ev) => setAbsent('secondAbsent', ev.target.checked)} /> Second counselor absent?</label>
+              )}
+            </div>
+          )}
           <h4 className="wiz-sub">Visiting leaders to recognize (if known)</h4>
           {[...answers.visitors, emptyVisitor()].map((v, i) => {
             const isNew = i === answers.visitors.length
@@ -532,6 +556,20 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
         </div>
         </div>
       </div>
+      {hosed && (
+        <div className="modal splat-modal no-print" role="alertdialog" aria-label="The whole bishopric is gone" onClick={(ev) => { ev.stopPropagation(); setHosed(false) }}>
+          <div className="splat" onClick={(ev) => ev.stopPropagation()}>
+            <svg viewBox="0 0 420 380" aria-hidden="true">
+              <path d="M210 42 C240 8 274 52 302 34 C336 14 352 72 342 100 C386 104 408 152 374 180 C406 216 386 270 344 272 C350 316 302 350 272 324 C246 360 198 356 184 320 C146 344 100 320 108 280 C62 286 26 244 54 208 C20 176 42 124 88 120 C72 78 112 42 146 68 C158 36 194 22 210 42 Z" />
+              <circle cx="52" cy="62" r="14" /><circle cx="22" cy="104" r="7" /><circle cx="384" cy="48" r="11" /><circle cx="404" cy="332" r="9" />
+              <circle cx="40" cy="328" r="12" /><circle cx="86" cy="354" r="6" /><circle cx="330" cy="366" r="7" />
+              <path d="M180 318 C176 346 190 372 196 372 C204 372 204 346 202 322 Z" /><path d="M262 322 C262 350 272 376 278 376 C286 376 284 350 280 322 Z" />
+            </svg>
+            <p><strong>The whole bishopric is gone.</strong><br />We’re hosed.</p>
+            <button type="button" className="primary" autoFocus onClick={() => setHosed(false)}>Oh no</button>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   )
