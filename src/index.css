@@ -790,7 +790,8 @@ button.board-event { text-align: left; cursor: pointer; font: inherit; }
 .splat-modal { align-items: center; }
 .splat { position: relative; width: min(92vw, 420px); aspect-ratio: 420 / 380; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; animation: splat-in .45s cubic-bezier(.2, 1.5, .4, 1) both; }
 .splat svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--accent); filter: drop-shadow(0 8px 18px #000a); }
-.splat p, .splat button { position: relative; margin: 6px 0; color: #fff; }
-.splat p { font-size: 1.2rem; line-height: 1.3; padding: 0 18%; text-shadow: 0 1px 3px #000a; }
+.splat { cursor: pointer; outline: none; }
+.splat p { position: relative; margin: 0; color: #fff; }
+.splat p { font-size: 1.2rem; line-height: 1.35; padding: 0 14%; text-wrap: balance; transform: translate(2%, -2%); text-shadow: 0 1px 3px #000a; }
 @keyframes splat-in { from { transform: scale(.2) rotate(-12deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .splat { animation: none; } }

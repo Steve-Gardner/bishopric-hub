@@ -558,15 +558,14 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
       </div>
       {hosed && (
         <div className="modal splat-modal no-print" role="alertdialog" aria-label="The whole bishopric is gone" onClick={(ev) => { ev.stopPropagation(); setHosed(false) }}>
-          <div className="splat" onClick={(ev) => ev.stopPropagation()}>
+          <div className="splat" role="button" tabIndex={0} autoFocus aria-label="Close" onClick={() => setHosed(false)} onKeyDown={(ev) => { if (ev.key === 'Escape' || ev.key === 'Enter' || ev.key === ' ') setHosed(false) }}>
             <svg viewBox="0 0 420 380" aria-hidden="true">
               <path d="M210 42 C240 8 274 52 302 34 C336 14 352 72 342 100 C386 104 408 152 374 180 C406 216 386 270 344 272 C350 316 302 350 272 324 C246 360 198 356 184 320 C146 344 100 320 108 280 C62 286 26 244 54 208 C20 176 42 124 88 120 C72 78 112 42 146 68 C158 36 194 22 210 42 Z" />
               <circle cx="52" cy="62" r="14" /><circle cx="22" cy="104" r="7" /><circle cx="384" cy="48" r="11" /><circle cx="404" cy="332" r="9" />
               <circle cx="40" cy="328" r="12" /><circle cx="86" cy="354" r="6" /><circle cx="330" cy="366" r="7" />
               <path d="M180 318 C176 346 190 372 196 372 C204 372 204 346 202 322 Z" /><path d="M262 322 C262 350 272 376 278 376 C286 376 284 350 280 322 Z" />
             </svg>
-            <p><strong>The whole bishopric is gone.</strong><br />We’re hosed.</p>
-            <button type="button" className="primary" autoFocus onClick={() => setHosed(false)}>Oh no</button>
+            <p><strong>The whole bishopric<br />is gone.</strong><br />We’re hosed.</p>
           </div>
         </div>
       )}
