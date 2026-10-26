@@ -574,7 +574,7 @@ a.lesson-link { color: #b9b1b2; font-style: italic; }
 .sheet.blocker li { margin: 6px 0; }
 
 /* To Do heading under Interviews & Appointments */
-.todo-heading { margin: 22px 0 8px; color: var(--accent-bright); font-size: 1.15rem; }
+.todo-heading { margin: 22px 0 8px; font-size: 1.15rem; }
 
 /* The booking wizard */
 .wizard { margin-bottom: 14px; }
@@ -619,7 +619,7 @@ a.lesson-link { color: #b9b1b2; font-style: italic; }
 .board .board-meeting .small { font-size: .66rem; }
 
 /* The wizard's title: big red text */
-.wizard .gratitude-title h2 { color: var(--accent-bright); font-size: 1.4rem; line-height: 1.15; }
+.wizard .gratitude-title h2 { font-size: 1.4rem; line-height: 1.15; }
 
 /* Who attends: checkboxes for the bishopric, a box for others */
 .attendees { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }

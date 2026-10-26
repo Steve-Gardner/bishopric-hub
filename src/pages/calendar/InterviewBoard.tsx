@@ -14,7 +14,10 @@ import { PRESIDENCY_COLUMNS, presidencyItems, splitColumns } from '../../data/to
 import SlotPicker from './SlotPicker'
 import type { Appointment, CalendarEvent } from '../../data/types'
 
-const PX = 3.4 // pixels per minute
+const EMPTY_HOUR = 30 // height of an hour with nothing in it, so empty stretches take little room
+// Pixels per minute in an hour that has something in it: more room where short interviews need to be tapped and
+// read, less where there are only long meetings.
+const pxPerMinute = (shortest: number) => (shortest < 15 ? 3 : shortest < 30 ? 2.2 : 1.2)
 const GUTTER = 44 // width of the time labels
 const DEFAULT_MINUTES = APPOINTMENT_MINUTES
 
@@ -48,6 +51,18 @@ export default function InterviewBoard({ date, appts, reload, version }: Props) 
   const times = items.filter((i) => i.start).flatMap((i) => [toMin(i.start!), i.end ? toMin(i.end) : toMin(i.start!) + 60])
   const START = Math.max(6 * 60, Math.floor(Math.min(...times, 10 * 60) / 60) * 60)
   const END = Math.min(21 * 60, Math.max(Math.ceil(Math.max(...times, 0) / 60) * 60 + 60, START + 240))
+  // Hours with something in them keep their full height; empty hours shrink. yOf turns a time into a position.
+  const hourStarts = Array.from({ length: (END - START) / 60 }, (_, i) => START + i * 60)
+  const lengthsIn = (h: number) => items
+    .filter((i) => i.start && toMin(i.start) < h + 60 && (i.end ? toMin(i.end) : toMin(i.start) + 60) > h)
+    .map((i) => (i.end ? Math.max(toMin(i.end) - toMin(i.start!), 5) : 60))
+  const heights = hourStarts.map((h) => { const l = lengthsIn(h); return l.length ? 60 * pxPerMinute(Math.min(...l)) : EMPTY_HOUR })
+  const tops = heights.map((_, i) => heights.slice(0, i).reduce((a, b) => a + b, 0))
+  const total = heights.reduce((a, b) => a + b, 0)
+  const yOf = (m: number) => {
+    const i = Math.min(hourStarts.length - 1, Math.max(0, Math.floor((m - START) / 60)))
+    return tops[i] + ((m - hourStarts[i]) / 60) * heights[i]
+  }
   const leaderLabel = (col: number) => {
     const role = ROLES.find((r) => r.key === PRESIDENCY_COLUMNS[col])!
     return names[role.key]?.trim() || role.label
@@ -119,12 +134,12 @@ export default function InterviewBoard({ date, appts, reload, version }: Props) 
         ))}
       </div>
 
-      <div className="board" style={{ height: (END - START) * PX }}>
+      <div className="board" style={{ height: total }}>
         {[0, 1, 2].map((c) => (
           <div key={`lane-${c}`} className={`lane lane-${c}`} style={{ ...spanStyle(c, 1), top: 0, bottom: 0 }} aria-hidden="true" />
         ))}
         {hours.map((m) => (
-          <div key={m} className="board-hour" style={{ top: (m - START) * PX }}>
+          <div key={m} className="board-hour" style={{ top: yOf(m) }}>
             <span>{format(new Date(2000, 0, 1, m / 60), 'h a')}</span>
           </div>
         ))}
@@ -133,7 +148,7 @@ export default function InterviewBoard({ date, appts, reload, version }: Props) 
           const end = p.item.end ? Math.max(toMin(p.item.end), start + 5) : start + 60
           const key = `${p.item.source === 'appointment' ? 'a' : 'e'}:${p.item.id}`
           const ev = p.item.source === 'event' ? events.find((x) => x.id === p.item.id) : undefined
-          const style = { ...spanStyle(p.column, p.span), top: (start - START) * PX, height: Math.max((end - start) * PX, 20) }
+          const style = { ...spanStyle(p.column, p.span), top: yOf(start), height: Math.max(yOf(end) - yOf(start), 22) }
           if (p.item.source === 'event' && ev?.type !== 'meeting') {
             return (
               <button key={`${key}:${p.column}`} className="board-event" style={style} onClick={() => ev && setEventPicked(ev)} aria-label={`${p.item.title}. Tap for details or to delete`}>
