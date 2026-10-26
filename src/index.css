@@ -13,7 +13,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
 button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 button.danger { color: var(--danger); margin-left: auto; }
-input, select, textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+/* 16px or more: below that, iPhones zoom the page in whenever a box is tapped */
+input, select, textarea { font-size: 16px; width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
 label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 10px; }
 label input, label select, label textarea { margin-top: 4px; color: var(--text); }
 .row { display: flex; gap: 10px; align-items: end; } .row > label { flex: 1; }
@@ -725,3 +727,4 @@ button.board-meeting { width: 100%; text-align: left; cursor: pointer; font: inh
 .slot-col { display: flex; flex-direction: column; gap: 6px; }
 .slot-override { margin: 12px 0; border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; }
 .slot-override summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+button.board-event { text-align: left; cursor: pointer; font: inherit; }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
+import EventPopup from '../../components/EventPopup'
 import { useBlocker } from '../../components/useBlocker'
 import { useStaff } from '../../components/useStaff'
 import { APPOINTMENT_MINUTES, appointmentConflicts } from '../../data/conflicts'
@@ -34,6 +35,7 @@ export default function InterviewBoard({ date, appts, reload, version }: Props) 
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [picked, setPicked] = useState<string | null>(null) // the interview whose sheet is open
   const [moving, setMoving] = useState(false)
+  const [eventPicked, setEventPicked] = useState<CalendarEvent | null>(null) // a meeting or event whose details are open
 
   const loadEvents = () => eventStore.list().then(setEvents)
   useEffect(() => { loadEvents() }, [date, version])
@@ -92,12 +94,13 @@ export default function InterviewBoard({ date, appts, reload, version }: Props) 
     const i = info(key)
     if (!i) return null
     const tappable = key.startsWith('a:')
+    const evt = key.startsWith('e:') ? events.find((x) => x.id === key.slice(2)) : undefined
     const text = <span><strong>{i.name}</strong> <span className="small">{i.minutes} min{i.time ? ` · ${fmtTime(i.time)}` : ''}</span></span>
     const label = `${i.name}, ${i.minutes} minutes${i.time ? `, ${fmtTime(i.time)}` : ''}, ${i.detail}`
     return tappable ? (
       <button key={key} className={`board-meeting ${extra ?? ''}`} aria-label={`${label}. Tap to move or remove`} onClick={() => { setMoving(false); setPicked(key) }}>{text}</button>
     ) : (
-      <div key={key} className={`board-meeting ${extra ?? ''}`} role="img" aria-label={label}>{text}</div>
+      <button key={key} className={`board-meeting ${extra ?? ''}`} aria-label={`${label}. Tap for details or to delete`} onClick={() => evt && setEventPicked(evt)}>{text}</button>
     )
   }
 
@@ -133,9 +136,9 @@ export default function InterviewBoard({ date, appts, reload, version }: Props) 
           const style = { ...spanStyle(p.column, p.span), top: (start - START) * PX, height: Math.max((end - start) * PX, 20) }
           if (p.item.source === 'event' && ev?.type !== 'meeting') {
             return (
-              <div key={`${key}:${p.column}`} className="board-event" style={style}>
+              <button key={`${key}:${p.column}`} className="board-event" style={style} onClick={() => ev && setEventPicked(ev)} aria-label={`${p.item.title}. Tap for details or to delete`}>
                 <span className="today-time">{fmtRange(p.item.start, p.item.end)}</span> <strong>{p.item.title}</strong>
-              </div>
+              </button>
             )
           }
           return (
@@ -145,7 +148,7 @@ export default function InterviewBoard({ date, appts, reload, version }: Props) 
           )
         })}
       </div>
-      <p className="muted small">{format(parseISO(date), 'EEEE, MMM d')}. Other things on the bishopric's calendar show in gray. Tap an interview to move it or take it off.</p>
+      <p className="muted small">{format(parseISO(date), 'EEEE, MMM d')}. Other things on the bishopric's calendar show in gray. Tap an interview to move it or take it off; tap a meeting or event for its details or to delete it.</p>
 
       {sheetAppt && (
         <div className="modal" onClick={() => { setPicked(null); setMoving(false) }}>
@@ -167,6 +170,9 @@ export default function InterviewBoard({ date, appts, reload, version }: Props) 
             )}
           </div>
         </div>
+      )}
+      {eventPicked && (
+        <EventPopup event={eventPicked} date={date} onClose={() => setEventPicked(null)} onChanged={() => { loadEvents(); reload() }} />
       )}
       {dialog}
     </>

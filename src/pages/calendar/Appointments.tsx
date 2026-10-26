@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { addDays, format, parseISO } from 'date-fns'
+import Fold from '../../components/Fold'
 import BookingWizard from './BookingWizard'
 import InterviewBoard from './InterviewBoard'
 import ListEditor from '../../components/ListEditor'
@@ -51,16 +52,19 @@ export default function Appointments({ date, setDate, appts, reload }: Props) {
 
       <hr className="day-divider" />
 
-      <h2 className="fold-group-title">Schedule for {format(parseISO(date), 'EEEE, MMM d')}</h2>
-      <div className="date-nav-inline appt-date">
-        <button onClick={() => shift(-7)} aria-label="Previous week" title="Previous week">‹</button>
-        <label className="date-chip" title="Choose a date">
-          {format(parseISO(date), 'EEE, MMM d')}
-          <input type="date" value={date} aria-label={`Date, ${format(parseISO(date), 'MMM d')}. Change`} onChange={(ev) => ev.target.value && setDate(ev.target.value)} />
-        </label>
-        <button onClick={() => shift(7)} aria-label="Next week" title="Next week">›</button>
-      </div>
-      <InterviewBoard date={date} appts={appts} reload={reload} version={version} />
+      <Fold red id="appt-day-schedule" title={`Schedule for ${format(parseISO(date), 'EEEE, MMM d')}`}>
+        <div className="fold-pad">
+        <div className="date-nav-inline appt-date">
+          <button onClick={() => shift(-7)} aria-label="Previous week" title="Previous week">‹</button>
+          <label className="date-chip" title="Choose a date">
+            {format(parseISO(date), 'EEE, MMM d')}
+            <input type="date" value={date} aria-label={`Date, ${format(parseISO(date), 'MMM d')}. Change`} onChange={(ev) => ev.target.value && setDate(ev.target.value)} />
+          </label>
+          <button onClick={() => shift(7)} aria-label="Next week" title="Next week">›</button>
+        </div>
+        <InterviewBoard date={date} appts={appts} reload={reload} version={version} />
+        </div>
+      </Fold>
 
       <h2 className="todo-heading">To Do</h2>
       <ListEditor listKey="set-apart" title="Need to be set apart" placeholder="Name and calling" checkable />

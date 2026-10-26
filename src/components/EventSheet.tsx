@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { eventConflicts } from '../data/conflicts'
-import { appointmentStore, eventStore, listStore } from '../data/store'
+import { removeEventSeries, skipOccurrence } from '../data/eventActions'
+import { appointmentStore, eventStore } from '../data/store'
 import { EVENT_TYPES, type CalendarEvent, type EventType, type RecurKind } from '../data/types'
 import AttendeePicker from './AttendeePicker'
 import { useStaff } from './useStaff'
@@ -35,15 +36,12 @@ export default function EventSheet({ event, exists, occurrence, onClose, onChang
     done()
   }
   const removeSeries = async () => {
-    // Also drop the event's agenda checklist so it doesn't linger as orphaned data.
-    const items = (await listStore.list()).filter((i) => i.list === `event:${draft.id}`)
-    await Promise.all(items.map((i) => listStore.remove(i.id)))
-    await eventStore.remove(draft.id)
+    await removeEventSeries(draft.id)
     done()
   }
   const removeOne = async () => {
     if (!occurrence) return
-    await eventStore.save({ ...draft, exceptions: [...(draft.exceptions ?? []), occurrence] })
+    await skipOccurrence(draft, occurrence)
     done()
   }
 

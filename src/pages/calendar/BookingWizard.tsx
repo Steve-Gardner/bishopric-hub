@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { addDays, format, getDay } from 'date-fns'
 import AttendeePicker from '../../components/AttendeePicker'
+import NameSuggest from '../../components/NameSuggest'
 import { useBlocker } from '../../components/useBlocker'
 import { useStaff } from '../../components/useStaff'
 import { everyone, type Attendees } from '../../data/attendees'
@@ -38,11 +39,12 @@ export default function BookingWizard({ names, onCreated }: Props) {
   const [kind, setKind] = useState<Kind>('interview')
   const [name, setName] = useState('') // the interview's person, or the meeting's title
   const [minutes, setMinutes] = useState(0)
+  const [customLength, setCustomLength] = useState(false) // typing a length instead of choosing one of the buttons
   const [attendees, setAttendees] = useState<Attendees>(everyone)
   const [repeat, setRepeat] = useState<Repeat>('none')
 
   const stepsFor = kind === 'interview' ? 5 : 6 // kind, name, length, then who it is with and the time (or who attends, repeats, when)
-  const finish = () => { setStep(-1); setName(''); setMinutes(0); setAttendees(everyone()); setRepeat('none') }
+  const finish = () => { setStep(-1); setName(''); setMinutes(0); setCustomLength(false); setAttendees(everyone()); setRepeat('none') }
 
   const label = (role: RoleKey) => staff[role]?.trim() || ROLES.find((r) => r.key === role)?.label || role
   const today = () => format(new Date(), 'yyyy-MM-dd')
@@ -102,8 +104,7 @@ export default function BookingWizard({ names, onCreated }: Props) {
           <p className="wizard-q">{kind === 'interview' ? 'Who is the interview for?' : 'What is the meeting called?'}</p>
           {kind === 'interview' ? (
             <label>Ward member
-              <input autoFocus value={name} list="wizard-names" placeholder="Type a name" onChange={(ev) => setName(ev.target.value)} />
-              <datalist id="wizard-names">{names.map((n) => <option key={n} value={n} />)}</datalist>
+              <NameSuggest autoFocus value={name} names={names} placeholder="Type a name" onChange={setName} />
             </label>
           ) : (
             <label>Title
@@ -124,7 +125,16 @@ export default function BookingWizard({ names, onCreated }: Props) {
             {LENGTHS.filter((m) => kind === 'meeting' || m <= 60).map((m) => (
               <button key={m} className={minutes === m ? 'primary' : ''} onClick={() => { setMinutes(m); setStep(3) }}>{m} min</button>
             ))}
+            <button className={customLength ? 'primary' : ''} onClick={() => { setCustomLength(true); setMinutes(0) }}>Other</button>
           </div>
+          {customLength && (
+            <form className="row actions" onSubmit={(ev) => { ev.preventDefault(); if (minutes >= 5) setStep(3) }}>
+              <label>Minutes
+                <input type="number" inputMode="numeric" min={5} max={480} step={5} autoFocus value={minutes || ''} placeholder="e.g. 25" onChange={(ev) => setMinutes(Math.max(0, Math.min(480, Number(ev.target.value))))} />
+              </label>
+              <button type="submit" className="primary" disabled={minutes < 5}>Next</button>
+            </form>
+          )}
           <div className="row actions"><button onClick={() => setStep(1)}>Back</button></div>
         </>
       )}
