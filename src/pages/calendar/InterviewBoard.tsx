@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { useBlocker } from '../../components/useBlocker'
 import { useStaff } from '../../components/useStaff'
-import { APPOINTMENT_MINUTES, appointmentConflicts, eventConflicts } from '../../data/conflicts'
+import { APPOINTMENT_MINUTES, appointmentConflicts } from '../../data/conflicts'
 import { fmtRange, fmtTime } from '../../data/format'
 import type { Slot } from '../../data/openSlots'
 import { eventsOnDay } from '../../data/recurrence'
@@ -18,7 +18,6 @@ const GUTTER = 44 // width of the time labels
 const DEFAULT_MINUTES = APPOINTMENT_MINUTES
 
 const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
-const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 
 interface Props {
   date: string
