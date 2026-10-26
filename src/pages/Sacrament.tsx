@@ -66,6 +66,7 @@ export default function Sacrament() {
       special={specialMeeting(date, special)}
       conducting={sundayPlan(date, sundays.find((n) => n.id === date), names).conducting}
       leaders={leaders}
+      fastSunday={/fast/i.test(sundayPlan(date, sundays.find((n) => n.id === date), names).note)}
       onConducting={async (who) => { await setSunday(date, { conducting: who }, names); reload() }}
       onChange={reload}
     />

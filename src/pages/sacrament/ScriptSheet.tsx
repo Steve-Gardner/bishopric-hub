@@ -18,6 +18,7 @@ interface Props {
   youth: Youth[]
   conducting: string // from the Conducting Schedule
   leaders: string[] // the bishop and his counselors, as named in Roles
+  fastDefault: boolean // whether the Conducting Schedule calls this a fast Sunday
   onConducting: (name: string) => void // writes the choice back to the Conducting Schedule
   onChange: () => void // after the program changes (a musical number added or moved), so it can be read again
   onClose: () => void
@@ -39,7 +40,7 @@ function Marked({ text }: { text: string }) {
 
 // The conducting script for one Sunday: a short wizard for what the program doesn't already say, and the
 // finished script below it, ready to print or save as a PDF.
-export default function ScriptSheet({ date, entries, members, youth, conducting, leaders, onConducting, onChange, onClose }: Props) {
+export default function ScriptSheet({ date, entries, members, youth, conducting, leaders, fastDefault, onConducting, onChange, onClose }: Props) {
   const [answers, setAnswers] = useState<ScriptAnswers | null>(null)
   const [extraRows, setExtraRows] = useState(0) // empty boxes added with + for another visiting leader
   const nameOfVisitor = (v: Visitor) => STAKE_LEADERS.find((l) => l.key === v.who)?.name ?? v.name.trim()
@@ -251,9 +252,10 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
   const presiding = bishop && bishop !== ROLES[0].label ? `Bishop ${bishop.replace(/^Bishop\s+/i, '')}` : ''
   const conductorRole: ConductorRole = !conducting ? 'other' : conducting === leaders[0] ? 'bishop' : conducting === leaders[1] ? 'first' : conducting === leaders[2] ? 'second' : 'other'
   const bishopConducting = conductorRole === 'bishop'
+  const fast = answers.fastSunday ?? fastDefault // a fast and testimony meeting, unless changed here
   const nameIn = (i: number) => (leaders[i] && leaders[i] !== ROLES[i].label ? leaders[i] : '')
   const dyslexic = answers.dyslexic ?? bishopConducting // on for the bishop unless someone turns it off
-  const standard = buildScript({ date, conductorRole, counselors: { first: nameIn(1), second: nameIn(2) }, answers: { ...answers, ...merged, presiding }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
+  const standard = buildScript({ date, fastSunday: fast, conductorRole, counselors: { first: nameIn(1), second: nameIn(2) }, answers: { ...answers, ...merged, presiding }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
   const blocks = manual ?? standard
 
   return createPortal(
@@ -412,6 +414,7 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
               </label>
             </div>
           )}
+          <label className="wiz-check"><input type="checkbox" checked={fast} onChange={(ev) => set('fastSunday', ev.target.checked)} /> Fast and testimony meeting</label>
           <label className="wiz-check"><input type="checkbox" checked={answers.babyBlessings} onChange={(ev) => set('babyBlessings', ev.target.checked)} /> Baby blessing</label>
           {answers.babyBlessings && (
             <div className="baby-names">
@@ -428,6 +431,7 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
           )}
 
           <h3 className="wiz-section">Prayers and Speakers</h3>
+          {fast && movable.length > 0 && <p className="muted small">Fast Sunday: speakers and musical numbers are left out of the script.</p>}
           {sorted.length === 0 && <p className="muted small">Nothing on the program yet. Add prayers and speakers on the Sacrament tab.</p>}
           {(() => {
             const isSpeaker = (e: SacramentEntry) => ['youth-speaker', 'adult-speaker', 'speaker'].includes(e.role)

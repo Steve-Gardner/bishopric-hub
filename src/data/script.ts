@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { findByName } from './nicknames'
-import { describeEntry, sortEntries } from './sacrament'
+import { sortEntries } from './sacrament'
 import type { SacramentEntry } from './types'
 
 // The Sacrament Meeting Conducting Script, built from the program on the Sacrament tab plus a few answers
@@ -9,6 +9,8 @@ import type { SacramentEntry } from './types'
 export interface HymnAnswer { number: string; title: string }
 
 export const WARD_NAME = 'Ben Lomond 5th'
+// When the testimonies are expected to end on a fast Sunday. It changes once a year, with the meeting time.
+export const FAST_SUNDAY_END = '12:50'
 export const TITLES = ['Brother', 'Sister', 'President'] as const
 // Offered to speakers only: they are introduced as "our youth speaker, Jamie Cruz" instead of with a title.
 export const YOUTH_SPEAKER = 'Youth Speaker'
@@ -29,6 +31,7 @@ export interface ScriptAnswers {
   stakeBusiness: boolean
   stakeWho: string // who has the stake business, if known
   babyBlessings: boolean
+  fastSunday?: boolean // overrides what the Conducting Schedule says about this Sunday
   bishopAbsent?: boolean // set when a counselor conducts: the first counselor then presides
   firstAbsent?: boolean // ...and when he is away too, the second counselor
   secondAbsent?: boolean
@@ -145,6 +148,7 @@ export interface ScriptInput {
   answers: ScriptAnswers
   conducting: string // an empty string when no one is set
   conductorRole: ConductorRole
+  fastSunday: boolean // a fast and testimony meeting: no speakers or music, just testimonies
   counselors: { first: string; second: string } // their names from Roles; '' until one has been entered
   entries: SacramentEntry[]
   people: Record<string, ProgramPerson> // by entry id, for prayers and speakers
@@ -223,7 +227,7 @@ export function buildScript(input: ScriptInput): Block[] {
   else if (!home) intro = asked
   else if (home.role === role) intro = `I am ${conductor}.`
   else if (home.role === 'bishop') intro = `I am ${conductor}, and ${bishop}, who presides today, has asked me to conduct.`
-  else intro = `${asked} We recognize ${home.desc}, who presides today.`
+  else intro = `${asked} ${home.desc}, presides today.`
   out.push({
     kind: 'say',
     text:
@@ -248,7 +252,8 @@ export function buildScript(input: ScriptInput): Block[] {
   const known = parts.filter(Boolean)
   const list = known.length <= 2 ? known.join(' and ') : `${known.slice(0, -1).join('; ')}; and ${known.at(-1)}`
   // With no one to name, a blank is left to write in whoever turns up.
-  out.push({ kind: 'say', text: known.length ? `We also recognize ${list}.` : `We also recognize ${BLANK} from the ${BLANK}.` })
+  const onStand = recognized.length === 1 ? 'who is on the stand today' : 'who are on the stand today'
+  out.push({ kind: 'say', text: known.length ? `We also recognize ${list}, ${onStand}.` : `We also recognize ${BLANK} from the ${BLANK}.` })
   const pianist = a.pianist.trim()
   const leader = a.chorister.trim()
   if (pianist || leader) {
@@ -329,55 +334,53 @@ export function buildScript(input: ScriptInput): Block[] {
     out.push({ kind: 'say', text: `We will now have the privilege of hearing the baby ${babies.length > 1 ? 'blessings' : 'blessing'} for ${sentenceList(babies)}.` })
   }
 
-  // Speakers and music
-  const items = program.filter((e) => ['youth-speaker', 'adult-speaker', 'speaker', 'musical', 'choir'].includes(e.role))
-  out.push({ kind: 'heading', text: 'Speakers and Music' })
-  if (!items.length) {
-    out.push({ kind: 'cue', text: 'No speakers or music on the program yet' })
+  // Speakers and music: or, on a fast Sunday, testimonies.
+  if (input.fastSunday) {
+    out.push({ kind: 'heading', text: 'Testimonies' })
+    out.push({ kind: 'cue', text: 'Bishopric member shares testimony' })
+    out.push({ kind: 'say', text: `Brothers and Sisters, the time is now yours to share your testimonies of the Savior and His gospel. We will go until about ${FAST_SUNDAY_END}.` })
+    out.push({ kind: 'cue', text: 'Bishopric member sits down' })
   } else {
-    out.push({ kind: 'cue', text: 'Bishopric member stands up after the sacrament' })
-    const isSpeaker = (e: SacramentEntry) => e.role.endsWith('speaker')
-    // Split the program into runs of speakers, with each musical number between them.
-    const groups: SacramentEntry[][] = []
-    for (const e of items) {
-      const last = groups.at(-1)
-      if (isSpeaker(e) && last && isSpeaker(last[0])) last.push(e)
-      else groups.push([e])
+    const items = program.filter((e) => ['youth-speaker', 'adult-speaker', 'speaker', 'musical', 'choir'].includes(e.role))
+    out.push({ kind: 'heading', text: 'Speakers and Music' })
+    if (!items.length) {
+      out.push({ kind: 'cue', text: 'No speakers or music on the program yet' })
+    } else {
+      out.push({ kind: 'cue', text: 'Bishopric member stands up after the sacrament' })
+      const speakers = items.filter((e) => isSpeakerRole(e.role)).length
+      items.forEach((e, i) => {
+        const thanks = i === 0 ? 'Thank you. ' : ''
+        const prev = items[i - 1]
+        let line: string
+        if (!isSpeakerRole(e.role)) {
+          const title = e.details?.title?.trim()
+          const who = e.role === 'choir' ? 'our Ward Choir' : e.details?.performers?.trim() || '[Performer(s)]'
+          line = `We will ${i === 0 ? 'now' : 'then'} have a special musical number${title ? `, \u201c${title}\u201d,` : ''} performed by ${who}.`
+        } else if (i === 0) {
+          line = `We will now hear from ${said(input, e, seen)}.`
+        } else if (speakers >= 2 && i === items.length - 1) {
+          line = `Our concluding speaker will be ${said(input, e, seen)}.`
+        } else if (isSpeakerRole(prev.role)) {
+          // The previous speaker has just been named, so this is the second mention of them.
+          const before = said(input, prev, seen)
+          line = `Following ${before}, we'll hear from ${said(input, e, seen)}.`
+        } else {
+          line = `Following the musical number, we'll hear from ${said(input, e, seen)}.`
+        }
+        out.push({ kind: 'say', text: thanks + line })
+      })
     }
-    const speakerRun = (g: SacramentEntry[]) => {
-      const names = g.map((e) => said(input, e, seen))
-      return names.length === 1 ? names[0] : `${names[0]}, followed by ${sentenceList(names.slice(1))}`
-    }
-    let spoke = false
-    let prev = ''
-    groups.forEach((g, i) => {
-      if (isSpeaker(g[0])) {
-        const lead = !spoke
-          ? 'First we will hear from '
-          : 'After the musical number, we will hear from '
-        out.push({ kind: 'say', text: `${lead}${speakerRun(g)}.` })
-        spoke = true
-        prev = said(input, g[g.length - 1], seen)
-      } else {
-        const d = describeEntry(g[0])
-        const doing = g[0].role === 'choir' ? 'sing' : 'perform'
-        const who = g[0].role === 'choir' ? 'the Ward Choir' : g[0].details?.performers?.trim() || '[Performer(s)]'
-        const title = g[0].details?.title?.trim() || d.headline
-        out.push({ kind: 'say', text: `Following ${i > 0 ? prev : 'the sacrament'}, ${who} will ${doing} ${title}.` })
-        prev = 'the musical number'
-      }
-    })
   }
 
   // Closing
   out.push({ kind: 'heading', text: 'Closing' })
-  const lastItem = items.at(-1)
-  const after = lastItem
-    ? isSpeakerRole(lastItem.role) ? said(input, lastItem, seen) : 'the musical number'
-    : ''
+  const hymnShort = (h: HymnAnswer) => {
+    const num = h.number.trim().replace(/^#/, '')
+    return [num ? `#${num}` : '#[#]', h.title.trim() || '[Hymn Title]'].join(', ')
+  }
   out.push({
     kind: 'say',
-    text: `${after ? `Following ${after}, the` : 'The'} closing song will be ${hymnText(a.closingHymn)}. ${closing ? said(input, closing, seen) : '[Name]'} will offer the closing prayer.`,
+    text: `${input.fastSunday ? 'Brothers and Sisters, thank you for your testimonies today. ' : ''}Our closing hymn will be ${hymnShort(a.closingHymn)}. ${closing ? said(input, closing, seen) : '[Name]'} will offer the closing prayer.`,
   })
   return out
 }
