@@ -1,10 +1,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { format, parseISO } from 'date-fns'
+import AutoTextarea from '../../components/AutoTextarea'
+import PencilIcon from '../../components/PencilIcon'
+import ReorderList from '../../components/ReorderList'
 import { ROLES } from '../../data/roles'
-import { ROLE_LABEL, sortEntries } from '../../data/sacrament'
-import { TITLES, buildScript, defaultAnswers, defaultTitle, type HymnAnswer, type ScriptAnswers } from '../../data/script'
-import { listStore, settingStore } from '../../data/store'
+import { ROLE_LABEL, describeEntry, nextOrder, sortEntries } from '../../data/sacrament'
+import { TITLES, buildScript, defaultAnswers, defaultTitle, type Block, type HymnAnswer, type ScriptAnswers } from '../../data/script'
+import { listStore, sacramentStore, settingStore } from '../../data/store'
 import type { Member, SacramentEntry, Youth } from '../../data/types'
 
 interface Props {
@@ -13,11 +16,14 @@ interface Props {
   members: Member[]
   youth: Youth[]
   conducting: string // from the Conducting Schedule
-  presiding: string // the bishop's name from Roles
+  leaders: string[] // the bishop and his counselors, as named in Roles
+  onConducting: (name: string) => void // writes the choice back to the Conducting Schedule
+  onChange: () => void // after the program changes (a musical number added or moved), so it can be read again
   onClose: () => void
 }
 
 const answersKey = (date: string) => `script:${date}`
+const manualKey = (date: string) => `script:${date}:edited`
 
 // Anything in [square brackets] is something still to be filled in; show it so it can't be missed.
 function Marked({ text }: { text: string }) {
@@ -32,12 +38,19 @@ function Marked({ text }: { text: string }) {
 
 // The conducting script for one Sunday: a short wizard for what the program doesn't already say, and the
 // finished script below it, ready to print or save as a PDF.
-export default function ScriptSheet({ date, entries, members, youth, conducting, presiding, onClose }: Props) {
+export default function ScriptSheet({ date, entries, members, youth, conducting, leaders, onConducting, onChange, onClose }: Props) {
   const [answers, setAnswers] = useState<ScriptAnswers | null>(null)
   type Pulled = { announcements: string; releases: string; sustainings: string }
   // This Sunday's Sacrament Announcements, Releases and Sustainings on the Bishopric Agenda
   const [agenda, setAgenda] = useState<Pulled>({ announcements: '', releases: '', sustainings: '' })
   const loaded = useRef(false)
+  const [musicType, setMusicType] = useState<'musical' | 'choir'>('musical')
+  const [music, setMusic] = useState({ performers: '', title: '' })
+  const [addingMusic, setAddingMusic] = useState(false)
+  // The script as edited by hand for this Sunday only; null while it still follows Meeting Setup.
+  const [manual, setManual] = useState<Block[] | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [pane, setPane] = useState<'form' | 'script'>('form') // which half shows on a narrow screen; wide screens show both
 
   useEffect(() => {
     let alive = true
@@ -51,7 +64,7 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
       let saved: Partial<ScriptAnswers> = {}
       try { saved = JSON.parse(byId[answersKey(date)] ?? '{}') } catch { /* start fresh */ }
       const base = defaultAnswers(entries, saved)
-      if (!base.presiding) base.presiding = presiding && presiding !== 'Bishop' ? `Bishop ${presiding.replace(/^Bishop\s+/i, '')}` : ''
+      try { setManual(byId[manualKey(date)] ? (JSON.parse(byId[manualKey(date)]) as Block[]) : null) } catch { /* ignore */ }
       setAnswers(base)
       loaded.current = true
     })
@@ -69,6 +82,17 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
     return () => clearTimeout(t)
   }, [answers, date])
 
+  const manualLoaded = useRef(false)
+  useEffect(() => {
+    if (!loaded.current) return
+    if (!manualLoaded.current) { manualLoaded.current = true; return }
+    const t = setTimeout(() => {
+      if (manual) settingStore.save({ id: manualKey(date), value: JSON.stringify(manual) })
+      else settingStore.remove(manualKey(date))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [manual, date])
+
   const sorted = useMemo(() => sortEntries(entries), [entries])
   const named = useMemo(() => {
     const people: Record<string, { entry: SacramentEntry; name: string; group?: 'young-men' | 'young-women' }> = {}
@@ -81,6 +105,31 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
   }, [sorted, youth, members])
 
   if (!answers) return null
+
+  // Musical numbers and speakers can be put in any order; prayers stay first and last.
+  const movable = sorted.filter((e) => ['youth-speaker', 'adult-speaker', 'speaker', 'musical', 'choir'].includes(e.role))
+  const opening = sorted.find((e) => e.role === 'invocation')
+  const closing = sorted.find((e) => e.role === 'benediction')
+  const canAddMusic = music.title.trim() !== '' || (musicType === 'musical' && music.performers.trim() !== '')
+  const addMusic = async () => {
+    if (!canAddMusic) return
+    const details: Record<string, string> = {}
+    if (music.title.trim()) details.title = music.title.trim()
+    if (music.performers.trim()) details[musicType === 'choir' ? 'director' : 'performers'] = music.performers.trim()
+    await sacramentStore.save({ id: crypto.randomUUID(), date, role: musicType, order: nextOrder(entries), details })
+    setMusic({ performers: '', title: '' })
+    setAddingMusic(false)
+    onChange()
+  }
+  const removeEntry = async (e: SacramentEntry) => { await sacramentStore.remove(e.id); onChange() }
+  // Dropping a row somewhere new: the speakers and musical numbers take the places they already held, in the new order.
+  const reorder = async (ids: string[]) => {
+    const slots = sorted.map((e, i) => (movable.includes(e) ? i : -1)).filter((i) => i >= 0)
+    const all = [...sorted]
+    ids.forEach((id, n) => { all[slots[n]] = sorted.find((e) => e.id === id)! })
+    await Promise.all(all.map((x, n) => sacramentStore.save({ ...x, order: n })))
+    onChange()
+  }
   const set = <K extends keyof ScriptAnswers>(k: K, v: ScriptAnswers[K]) => setAnswers({ ...answers, [k]: v })
   const merged = {
     announcements: answers.announcements ?? agenda.announcements,
@@ -115,7 +164,11 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
     )
   }
 
-  const blocks = buildScript({ answers: { ...answers, ...merged }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
+  // The bishop presides: his name from Roles, once one has been entered there.
+  const bishop = leaders[0] ?? ''
+  const presiding = bishop && bishop !== ROLES[0].label ? `Bishop ${bishop.replace(/^Bishop\s+/i, '')}` : ''
+  const standard = buildScript({ date, answers: { ...answers, ...merged, presiding }, conducting: ROLES.some((r) => r.label === conducting) ? '' : conducting, entries: sorted, people: named })
+  const blocks = manual ?? standard
 
   return createPortal(
     <div className="modal script-modal" onClick={onClose}>
@@ -128,10 +181,20 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
           </div>
         </div>
 
-        <details className="script-wizard no-print" open>
-          <summary>Questions for this Sunday</summary>
+        <div className="script-tabs no-print">
+          <button className={pane === 'form' ? 'primary' : ''} onClick={() => setPane('form')}>Meeting Setup</button>
+          <button className={pane === 'script' ? 'primary' : ''} onClick={() => setPane('script')}>Script</button>
+        </div>
+
+        <div className={`script-body show-${pane}`}>
+        <div className="script-wizard no-print">
           <h3 className="wiz-section">Presiding and Visitors</h3>
-          {text('presiding', 'Presiding', 'e.g. Bishop Smith')}
+          <label>Conducting
+            <select value={conducting} onChange={(ev) => onConducting(ev.target.value)}>
+              {!leaders.includes(conducting) && <option value={conducting}>{conducting || 'No one'}</option>}
+              {leaders.map((l, i) => <option key={l} value={l}>{l}{l !== ROLES[i].label ? ` (${ROLES[i].label})` : ''}</option>)}
+            </select>
+          </label>
           {text('visiting', 'Visiting leaders to recognize (if known)', 'Leave blank to write it in on the printed script')}
 
           <h3 className="wiz-section">Announcements</h3>
@@ -145,6 +208,33 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
           {hymn('openingHymn', 'Opening hymn')}
           {hymn('sacramentHymn', 'Sacrament hymn')}
           {hymn('closingHymn', 'Closing hymn')}
+          <h4 className="wiz-sub">Musical numbers</h4>
+          {sorted.filter((e) => e.role === 'musical' || e.role === 'choir').map((e) => (
+            <div className="music-row" key={e.id}>
+              <span><strong>{describeEntry(e).headline}</strong> <small className="muted">{describeEntry(e).label}{describeEntry(e).sub ? ` · ${describeEntry(e).sub}` : ''}</small></span>
+              <button type="button" className="danger" aria-label={`Remove ${describeEntry(e).headline}`} onClick={() => removeEntry(e)}>✕</button>
+            </div>
+          ))}
+          {addingMusic ? (
+            <div className="music-form">
+              <label>Kind
+                <select value={musicType} onChange={(ev) => setMusicType(ev.target.value as 'musical' | 'choir')}>
+                  <option value="musical">Special Musical Number</option>
+                  <option value="choir">Ward Choir Number</option>
+                </select>
+              </label>
+              <label>{musicType === 'choir' ? 'Director (optional)' : 'Performer(s)'}
+                <input value={music.performers} onChange={(ev) => setMusic({ ...music, performers: ev.target.value })} />
+              </label>
+              <label>Song Title<input value={music.title} onChange={(ev) => setMusic({ ...music, title: ev.target.value })} /></label>
+              <div className="row actions">
+                <button type="button" className="primary" disabled={!canAddMusic} onClick={addMusic}>Add</button>
+                <button type="button" onClick={() => { setAddingMusic(false); setMusic({ performers: '', title: '' }) }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setAddingMusic(true)}>+ Add Musical Number</button>
+          )}
 
           <h3 className="wiz-section">Callings</h3>
           {pulled('releases', 'Releases (one per line)', 'Name as Calling')}
@@ -176,38 +266,81 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
             </div>
           )}
 
-          {Object.values(named).length > 0 && (
-            <>
-              <h3 className="wiz-section">Prayers and Speakers</h3>
-              {Object.values(named).map(({ entry, name, group }) => {
-                const chosen = answers.titles[entry.id] ?? defaultTitle(name, group)
-                return (
-                  <label key={entry.id} className="title-pick">
-                    <select value={chosen ?? 'unset'} onChange={(ev) => set('titles', { ...answers.titles, [entry.id]: ev.target.value })} aria-label={`Title for ${name}`}>
-                      {chosen === undefined && <option value="unset" disabled>Choose title</option>}
-                      <option value=""> </option>
-                      {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <span>{name || 'Unknown'}<small className="muted">{ROLE_LABEL[entry.role]}</small></span>
-                  </label>
-                )
-              })}
-            </>
-          )}
-        </details>
+          <h3 className="wiz-section">Prayers and Speakers</h3>
+          {sorted.length === 0 && <p className="muted small">Nothing on the program yet. Add prayers and speakers on the Sacrament tab.</p>}
+          {(() => {
+            const titleSelect = (e: SacramentEntry) => {
+              const n = named[e.id]
+              const chosen = answers.titles[e.id] ?? defaultTitle(n.name, n.group) ?? ''
+              return (
+                <label className="title-pick">
+                  <select value={chosen} onChange={(ev) => set('titles', { ...answers.titles, [e.id]: ev.target.value })} aria-label={`Title for ${n.name}`}>
+                    <option value=""> </option>
+                    {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <span>{n.name || 'Unknown'}<small className="muted">{ROLE_LABEL[e.role]}</small></span>
+                </label>
+              )
+            }
+            const fixed = (e?: SacramentEntry) => e && <div className="speaker-row fixed-row">{named[e.id] && titleSelect(e)}</div>
+            return (
+              <>
+                {fixed(opening)}
+                {movable.length > 1 && <p className="muted small drag-hint">Drag <span aria-hidden="true">⋮⋮</span> to change the order.</p>}
+                <ReorderList
+                  items={movable}
+                  onReorder={reorder}
+                  render={(e, handle) => (
+                    <div className="speaker-row">
+                      {handle}
+                      {named[e.id] ? titleSelect(e) : (
+                        <div className="title-pick">
+                          <span className="kind-tag">{ROLE_LABEL[e.role]}</span>
+                          <span>{describeEntry(e).headline}{describeEntry(e).sub && <small className="muted">{describeEntry(e).sub}</small>}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                />
+                {fixed(closing)}
+              </>
+            )
+          })()}
+        </div>
 
-        <article className="script-page">
+        <div className="script-column">
+        <div className="script-edit-bar no-print">
+          {manual && !editing && <span className="muted small">Edited by hand for this Sunday.</span>}
+          <button type="button" className={editing ? 'primary' : ''} onClick={() => setEditing(!editing)}>
+            {editing ? 'Done' : <><PencilIcon /> Edit</>}
+          </button>
+        </div>
+        {manual && (
+          <p className="script-edited-note no-print">
+            This script has been edited by hand. It applies to this Sunday only, and changes in Meeting Setup no longer update it.{' '}
+            <button type="button" className="link-btn" onClick={() => { setManual(null); setEditing(false) }}>Reset to the standard script</button>
+          </p>
+        )}
+        <article className={`script-page${editing ? ' is-editing' : ''}`}>
           {blocks.map((b, i) => {
+            if (editing) {
+              const value = b.kind === 'list' ? b.items.join('\n') : b.text
+              const change = (v: string) =>
+                setManual(blocks.map((x, j) => (j !== i ? x : x.kind === 'list' ? { ...x, items: v.split('\n') } : { ...x, text: v })))
+              return <AutoTextarea multiline key={i} className={`script-edit script-edit-${b.kind}`} value={value} aria-label={`Edit ${b.kind}`} onChange={(ev) => change(ev.target.value)} />
+            }
             switch (b.kind) {
               case 'title': return <h1 key={i}>{b.text}</h1>
               case 'sub': return <h4 key={i}><Marked text={b.text} /></h4>
               case 'heading': return <h3 key={i} className="script-heading">{b.text}</h3>
               case 'cue': return <p key={i} className="script-cue">[{b.text}]</p>
-              case 'list': return <ul key={i}>{b.items.map((x, j) => <li key={j}><Marked text={x} /></li>)}</ul>
+              case 'list': return <ul key={i}>{b.items.filter(Boolean).map((x, j) => <li key={j}><Marked text={x} /></li>)}</ul>
               default: return <p key={i} className="script-say"><Marked text={b.text} /></p>
             }
           })}
         </article>
+        </div>
+        </div>
       </div>
     </div>,
     document.body,

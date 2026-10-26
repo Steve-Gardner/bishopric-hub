@@ -18,14 +18,13 @@ interface Props {
   special: SpecialMeeting // events on this Sunday (General Conference, Stake Conference...)
   conducting: string // who conducts, from the Conducting Schedule on the Schedule tab
   leaders: string[] // the bishop and his counselors, to choose from
-  presiding: string // the bishop's name, for the script
   onConducting: (name: string) => void // writes the choice back to the Conducting Schedule
   onChange: () => void
 }
 
 // One Sunday's program. The + in the red heading offers the kinds of items that can be added; picking one
 // shows just the fields that apply to it.
-export default function MeetingCard({ date, entries, members, youth, allEntries, special, conducting, leaders, presiding, onConducting, onChange }: Props) {
+export default function MeetingCard({ date, entries, members, youth, allEntries, special, conducting, leaders, onConducting, onChange }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [type, setType] = useState<EntryType | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})
@@ -241,7 +240,7 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
       </div>
       {dialog}
       {scriptOpen && (
-        <ScriptSheet date={date} entries={entries} members={members} youth={youth} conducting={conducting} presiding={presiding} onClose={() => setScriptOpen(false)} />
+        <ScriptSheet date={date} entries={entries} members={members} youth={youth} conducting={conducting} leaders={leaders} onConducting={onConducting} onChange={onChange} onClose={() => setScriptOpen(false)} />
       )}
     </div>
   )

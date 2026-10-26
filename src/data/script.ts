@@ -1,3 +1,4 @@
+import { format, parseISO } from 'date-fns'
 import { describeEntry, sortEntries } from './sacrament'
 import type { SacramentEntry } from './types'
 
@@ -55,6 +56,10 @@ export function defaultTitle(name: string, group?: 'young-men' | 'young-women'):
   return hasTitle(name) ? '' : undefined
 }
 
+// "Pat Lee as Primary Teacher" -> "Pat Lee". One line can name more than one person ("Pat and Chris Lee as ...").
+const nameOf = (line: string) => line.split(/\s+as\s+/i)[0].trim() || 'this individual'
+const isOne = (items: string[]) => items.length === 1 && !/,|\band\b|&/i.test(nameOf(items[0]))
+
 const sentenceList = (items: string[]) =>
   items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`
 
@@ -65,6 +70,7 @@ export interface ProgramPerson {
 }
 
 export interface ScriptInput {
+  date: string // the Sunday, yyyy-MM-dd
   answers: ScriptAnswers
   conducting: string // an empty string when no one is set
   entries: SacramentEntry[]
@@ -72,24 +78,29 @@ export interface ScriptInput {
 }
 
 // How a person in the program is said aloud.
-function said(input: ScriptInput, e: SacramentEntry): string {
+// The first time someone is named, a chosen title goes with their full name ("Sister Jamie Cruz"); after that
+// it is the title and last name ("Sister Cruz"). `seen` holds who has already been named.
+function said(input: ScriptInput, e: SacramentEntry, seen: Set<string>): string {
   const p = input.people[e.id]
   const name = (p?.name || e.details?.name || '').trim()
-  if (!name) return '[Brother/Sister Name]'
+  if (!name) return '[Name]'
   const title = input.answers.titles[e.id] ?? defaultTitle(name, p?.group)
-  if (title === '') return name
-  return `${title ?? '[Brother/Sister]'} ${lastName(name)}`
+  if (!title) return name
+  const first = !seen.has(name.toLowerCase())
+  seen.add(name.toLowerCase())
+  return first ? `${title} ${name}` : `${title} ${lastName(name)}`
 }
 
 export function buildScript(input: ScriptInput): Block[] {
   const a = input.answers
   const out: Block[] = []
+  const seen = new Set<string>()
   const program = sortEntries(input.entries)
   const opening = program.find((e) => e.role === 'invocation')
   const closing = program.find((e) => e.role === 'benediction')
 
   out.push({ kind: 'title', text: 'Sacrament Meeting Conducting Script' })
-  out.push({ kind: 'sub', text: `${WARD_NAME} Ward` })
+  out.push({ kind: 'sub', text: `${WARD_NAME} Ward · ${format(parseISO(input.date), 'EEEE, MMMM d, yyyy')}` })
 
   // Welcome
   out.push({ kind: 'heading', text: 'Welcome' })
@@ -105,25 +116,33 @@ export function buildScript(input: ScriptInput): Block[] {
     kind: 'say',
     text: a.visiting.trim() ? `We also recognize ${a.visiting.trim().replace(/\.$/, '')}.` : `We also recognize ${BLANK} from the ${BLANK}.`,
   })
-  const music: string[] = []
-  if (a.pianist.trim()) music.push(`We appreciate the prelude music provided by ${a.pianist.trim()}`)
-  if (a.chorister.trim()) music.push(`${music.length ? 'and we ' : 'We '}thank ${a.chorister.trim()} for leading our music today`)
-  if (music.length) out.push({ kind: 'say', text: music.join(', ') + '.' })
-
-  const announcements = lines(a.announcements ?? '')
-  if (announcements.length) {
-    out.push({ kind: 'say', text: 'Brief announcements:' })
-    out.push({ kind: 'list', items: announcements })
+  const pianist = a.pianist.trim()
+  const leader = a.chorister.trim()
+  if (pianist || leader) {
+    const prelude = pianist ? `We appreciate the prelude music provided by ${pianist}` : ''
+    const leads = leader ? `${prelude ? 'and also recognize' : 'We also recognize'} ${leader} who is leading our music today` : ''
+    out.push({ kind: 'say', text: [prelude, leads].filter(Boolean).join(', ') + '.' })
   }
 
   // Opening hymn and prayer
   out.push({ kind: 'heading', text: 'Opening Hymn and Prayer' })
   out.push({
     kind: 'say',
-    text: `We will begin our meeting by singing ${hymnText(a.openingHymn)}. Following the hymn, ${opening ? said(input, opening) : '[Brother/Sister Name]'} will offer our opening prayer.`,
+    text: `We will begin our meeting by singing ${hymnText(a.openingHymn)}. Following the hymn, ${opening ? said(input, opening, seen) : '[Name]'} will offer our opening prayer.`,
   })
   out.push({ kind: 'cue', text: 'Bishopric member stands up after the prayer' })
-  out.push({ kind: 'say', text: `Thank you, ${opening ? said(input, opening) : '[Brother/Sister Name]'}, for the opening prayer.` })
+  out.push({ kind: 'say', text: `Thank you, ${opening ? said(input, opening, seen) : '[Name]'}.` })
+
+  // Brief announcements
+  const announcements = lines(a.announcements ?? '')
+  out.push({ kind: 'heading', text: 'Brief Announcements' })
+  if (announcements.length) {
+    const howMany = announcements.length === 1 ? 'one brief announcement' : announcements.length === 2 ? 'a couple of brief announcements' : 'a few brief announcements'
+    out.push({ kind: 'say', text: `We have ${howMany} today.` })
+    out.push({ kind: 'list', items: announcements })
+  } else {
+    out.push({ kind: 'say', text: "We don't have any announcements today." })
+  }
 
   // Ward business
   const releases = lines(a.releases ?? '')
@@ -131,14 +150,20 @@ export function buildScript(input: ScriptInput): Block[] {
   if (releases.length || sustainings.length) {
     out.push({ kind: 'heading', text: 'Ward Business' })
     if (releases.length) {
-      out.push({ kind: 'say', text: 'The following individuals have been released:' })
+      const one = isOne(releases)
+      out.push({ kind: 'say', text: one ? 'The following individual has been released:' : 'The following individuals have been released:' })
       out.push({ kind: 'list', items: releases })
-      out.push({ kind: 'say', text: 'Those who wish to express their thanks for their service, please manifest it by the uplifted hand.' })
+      // A single person is named instead of saying his or her, so no one's gender has to be asked.
+      out.push({ kind: 'say', text: `Those who wish to express their thanks for ${one ? `${nameOf(releases[0])}'s` : 'their'} service, please manifest it by the uplifted hand.` })
     }
     if (sustainings.length) {
-      out.push({ kind: 'say', text: 'Would the following individuals please stand when their names are called. We have extended callings to:' })
+      const one = isOne(sustainings)
+      out.push({
+        kind: 'say',
+        text: one ? 'Would the following individual please stand. We have extended a calling to:' : 'Would the following individuals please stand when their names are called. We have extended callings to:',
+      })
       out.push({ kind: 'list', items: sustainings })
-      out.push({ kind: 'say', text: 'Those in favor of sustaining them may show it by the uplifted hand (Pause). Those opposed, if any, may do so (Pause).' })
+      out.push({ kind: 'say', text: `Those in favor of sustaining ${one ? nameOf(sustainings[0]) : 'them'} may show it by the uplifted hand (Pause). Those opposed, if any, may do so (Pause).` })
     }
   }
 
@@ -187,7 +212,7 @@ export function buildScript(input: ScriptInput): Block[] {
       else groups.push([e])
     }
     const speakerRun = (g: SacramentEntry[]) => {
-      const names = g.map((e) => said(input, e))
+      const names = g.map((e) => said(input, e, seen))
       return names.length === 1 ? names[0] : `${names[0]}, followed by ${sentenceList(names.slice(1))}`
     }
     let spoke = false
@@ -199,7 +224,7 @@ export function buildScript(input: ScriptInput): Block[] {
           : 'After the musical number, we will hear from '
         out.push({ kind: 'say', text: `${lead}${speakerRun(g)}.` })
         spoke = true
-        prev = said(input, g[g.length - 1])
+        prev = said(input, g[g.length - 1], seen)
       } else {
         const d = describeEntry(g[0])
         const doing = g[0].role === 'choir' ? 'sing' : 'perform'
@@ -215,11 +240,11 @@ export function buildScript(input: ScriptInput): Block[] {
   out.push({ kind: 'heading', text: 'Closing' })
   const lastItem = items.at(-1)
   const after = lastItem
-    ? isSpeakerRole(lastItem.role) ? said(input, lastItem) : 'the musical number'
+    ? isSpeakerRole(lastItem.role) ? said(input, lastItem, seen) : 'the musical number'
     : ''
   out.push({
     kind: 'say',
-    text: `${after ? `Following ${after}, the` : 'The'} closing song will be ${hymnText(a.closingHymn)}. ${closing ? said(input, closing) : '[Brother/Sister Name]'} will offer the closing prayer.`,
+    text: `${after ? `Following ${after}, the` : 'The'} closing song will be ${hymnText(a.closingHymn)}. ${closing ? said(input, closing, seen) : '[Name]'} will offer the closing prayer.`,
   })
   return out
 }
