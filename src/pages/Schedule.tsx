@@ -66,6 +66,7 @@ export default function Schedule() {
         <div className="tiles schedule-tiles">
           {sections.slice(0, 4).map(tileButton)}
           <hr className="day-divider tiles-divider" />
+          <h2 className="tiles-subtitle">Schedule Setup</h2>
           {sections.slice(4).map(tileButton)}
         </div>
       )}
