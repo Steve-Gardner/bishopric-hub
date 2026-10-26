@@ -7,6 +7,7 @@ import { ENTRY_TYPES, PRAYER_ROLES, ROLE_LABEL, describeEntry, missingFields, mo
 import type { SpecialMeeting } from '../../data/special'
 import { memberStore, sacramentStore } from '../../data/store'
 import type { Member, SacramentEntry, Youth } from '../../data/types'
+import ScriptSheet from './ScriptSheet'
 
 interface Props {
   date: string
@@ -17,17 +18,19 @@ interface Props {
   special: SpecialMeeting // events on this Sunday (General Conference, Stake Conference...)
   conducting: string // who conducts, from the Conducting Schedule on the Schedule tab
   leaders: string[] // the bishop and his counselors, to choose from
+  presiding: string // the bishop's name, for the script
   onConducting: (name: string) => void // writes the choice back to the Conducting Schedule
   onChange: () => void
 }
 
 // One Sunday's program. The + in the red heading offers the kinds of items that can be added; picking one
 // shows just the fields that apply to it.
-export default function MeetingCard({ date, entries, members, youth, allEntries, special, conducting, leaders, onConducting, onChange }: Props) {
+export default function MeetingCard({ date, entries, members, youth, allEntries, special, conducting, leaders, presiding, onConducting, onChange }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [type, setType] = useState<EntryType | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
+  const [scriptOpen, setScriptOpen] = useState(false)
   const { block, dialog } = useBlocker()
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -120,8 +123,8 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
           {special.labels.length > 0 && <span className="event-label"> · {special.labels.join(' · ')}</span>}
         </h2>
         {special.canSchedule && <div className="head-actions">
-          <button className="ghost-btn" disabled title="Coming soon" aria-label="Export script, coming soon">
-            Export Script<small>(Coming Soon)</small>
+          <button className="ghost-btn live" onClick={() => setScriptOpen(true)} aria-label={`Export the ${format(parseISO(date), 'MMM d')} conducting script`}>
+            Export Script<small>(Draft)</small>
           </button>
         <div className="add-menu" ref={menuRef}>
           <button
@@ -237,6 +240,9 @@ export default function MeetingCard({ date, entries, members, youth, allEntries,
 
       </div>
       {dialog}
+      {scriptOpen && (
+        <ScriptSheet date={date} entries={entries} members={members} youth={youth} conducting={conducting} presiding={presiding} onClose={() => setScriptOpen(false)} />
+      )}
     </div>
   )
 }
