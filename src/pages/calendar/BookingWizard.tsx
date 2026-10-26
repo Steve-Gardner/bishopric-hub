@@ -88,14 +88,17 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
   return (
     <div className="card wizard">
-      <span className="wizard-step muted small">Step {step + 1} of {stepsFor}</span>
+      <div className="wizard-corner">
+        <button onClick={finish}>Cancel</button>
+        <span className="muted small">Step {step + 1} of {stepsFor}</span>
+      </div>
 
       {step === 0 && (
         <>
           <p className="wizard-q">Is it an interview or a meeting?</p>
           <div className="choice-grid">
-            <button onClick={() => { setKind('interview'); setStep(1) }}>Interview</button>
-            <button onClick={() => { setKind('meeting'); setStep(1) }}>Meeting</button>
+            <button className="primary" onClick={() => { setKind('interview'); setStep(1) }}>Interview</button>
+            <button className="primary" onClick={() => { setKind('meeting'); setStep(1) }}>Meeting</button>
           </div>
         </>
       )}
@@ -144,8 +147,8 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
         <>
           <p className="wizard-q">Who will conduct the interview?</p>
           <div className="choice-grid">
-            <button onClick={() => { setWithWho('bishop'); setStep(4) }}>{label('bishop')}</button>
-            <button onClick={() => { setWithWho('counselor'); setStep(4) }}>A counselor</button>
+            <button className="primary" onClick={() => { setWithWho('bishop'); setStep(4) }}>{label('bishop')}</button>
+            <button className="primary" onClick={() => { setWithWho('counselor'); setStep(4) }}>A counselor</button>
           </div>
           <p className="muted small">A counselor means either {label('first-counselor')} or {label('second-counselor')}, whoever is free.</p>
           <div className="row actions"><button onClick={() => setStep(2)}>Back</button></div>
@@ -200,7 +203,6 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
         </>
       )}
 
-      <div className="row actions"><button onClick={finish}>Cancel</button></div>
       {dialog}
     </div>
   )
