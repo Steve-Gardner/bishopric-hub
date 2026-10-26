@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { addDays, format, parseISO } from 'date-fns'
+import { addDays, format, getDay, parseISO } from 'date-fns'
 import Fold from '../../components/Fold'
 import BookingWizard from './BookingWizard'
 import InterviewBoard from './InterviewBoard'
@@ -60,9 +60,14 @@ export default function Appointments({ date, setDate, appts, reload, startWizard
           <button onClick={() => shift(-7)} aria-label="Previous week" title="Previous week">‹</button>
           <label className="date-chip" title="Choose a date">
             {format(parseISO(date), 'EEE, MMM d')}
-            <input type="date" value={date} aria-label={`Date, ${format(parseISO(date), 'MMM d')}. Change`} onChange={(ev) => ev.target.value && setDate(ev.target.value)} />
+            <input
+              type="date" value={date} aria-label={`Date, ${format(parseISO(date), 'MMM d')}. Change`}
+              onChange={(ev) => ev.target.value && setDate(ev.target.value)}
+              onClick={(ev) => { try { ev.currentTarget.showPicker() } catch { /* the browser opens its own calendar */ } }}
+            />
           </label>
           <button onClick={() => shift(7)} aria-label="Next week" title="Next week">›</button>
+          {getDay(parseISO(date)) !== 0 && <button className="small" style={{ width: 'auto', padding: '0 10px' }} onClick={() => setDate(iso(addDays(parseISO(date), 7 - getDay(parseISO(date)))))}>Sunday</button>}
         </div>
         <InterviewBoard date={date} appts={appts} reload={reload} version={version} />
         </div>

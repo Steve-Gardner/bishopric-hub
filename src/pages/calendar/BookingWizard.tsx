@@ -13,6 +13,7 @@ import { ROLES, type RoleKey } from '../../data/roles'
 import { appointmentStore, eventStore } from '../../data/store'
 import type { Appointment, CalendarEvent } from '../../data/types'
 import SlotPicker from './SlotPicker'
+import './wizard.css'
 
 const LENGTHS = [10, 15, 20, 30, 45, 60, 90]
 type Kind = 'interview' | 'meeting'
@@ -87,10 +88,7 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
   return (
     <div className="card wizard">
-      <div className="gratitude-title">
-        <h2>Schedule a new {step === 0 ? 'interview or meeting' : kind}</h2>
-        <span className="muted small" style={{ whiteSpace: 'nowrap' }}>Step {step + 1} of {stepsFor}</span>
-      </div>
+      <span className="wizard-step muted small">Step {step + 1} of {stepsFor}</span>
 
       {step === 0 && (
         <>
@@ -156,7 +154,8 @@ export default function BookingWizard({ names, onCreated, autoStart, onStarted }
 
       {step === 4 && kind === 'interview' && (
         <>
-          <p className="wizard-q">Pick a time for {name.trim()} ({minutes} min with {withWho === 'bishop' ? label('bishop') : 'a counselor'}).</p>
+          <p className="wizard-q">Pick a time for {name.trim()}</p>
+          <p className="muted small">{minutes} min with {withWho === 'bishop' ? label('bishop') : 'a counselor'}</p>
           <SlotPicker minutes={minutes} roles={withWho === 'bishop' ? ['bishop'] : COUNSELORS} onPick={bookInterview} />
           <div className="row actions"><button onClick={() => setStep(3)}>Back</button></div>
         </>

@@ -1,0 +1,7 @@
+/* The wizard's question is its headline; the step count is a small tag in the corner */
+.wizard { position: relative; }
+.wizard-step { position: absolute; top: 10px; right: 12px; white-space: nowrap; }
+.wizard .wizard-q { font-size: 1.4rem; line-height: 1.15; font-weight: 700; margin: 0 0 10px; padding-right: 72px; }
+
+/* The last hour label sits just below the board; leave room for it */
+.board { margin-bottom: 20px; }
