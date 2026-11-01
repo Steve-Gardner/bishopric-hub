@@ -25,14 +25,17 @@ export interface Placed {
 }
 
 // What the three presidency members are doing on a date: the calendar events assigned to them, and their
-// appointments. `events` are the events already on that date. Anything assigned to none of them is left out.
+// appointments. `events` are the events already on that date. A timed event nobody is assigned to (Church, say)
+// is for everyone, so it fills all three columns. Anything assigned to someone else, and all-day events nobody
+// is assigned to, are left out; the Calendar lists those on their own.
 export function presidencyItems(
   events: CalendarEvent[], appointments: Appointment[], names: Record<string, string>,
 ): ScheduleItem[] {
   const columnsFor = (people: string[]) => PRESIDENCY_COLUMNS.flatMap((role, i) => (people.includes(role) ? [i] : []))
   const items: ScheduleItem[] = []
   for (const e of events) {
-    const columns = columnsFor(eventPeople(e, names))
+    const people = eventPeople(e, names)
+    const columns = people.length === 0 && e.time ? PRESIDENCY_COLUMNS.map((_, i) => i) : columnsFor(people)
     if (columns.length) items.push({ id: e.id, source: 'event', title: e.title, detail: e.location, start: e.time, end: e.endTime, columns, agenda: e.agenda })
   }
   for (const a of appointments) {

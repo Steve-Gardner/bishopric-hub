@@ -86,6 +86,8 @@ export default function Calendar() {
   const gridIds = new Set(allItems.map((i) => i.id))
   const otherEvents = dayEvents.filter((e) => !gridIds.has(e.id))
   const listEvents = member === 'all' ? otherEvents : onlyColumn >= 0 ? [] : shownEvents
+  const allDayEvents = listEvents.filter((e) => !e.time) // all-day events sit at the top of the day
+  const timedEvents = listEvents.filter((e) => e.time)
   const totalCount = gridIds.size + otherEvents.length
   const hiddenCount = totalCount - ((showGrid ? gridCount : 0) + listEvents.length)
   const next2Weeks = useMemo(() => {
@@ -171,6 +173,11 @@ export default function Calendar() {
           {member !== 'all' && hiddenCount > 0 ? `Nothing for ${memberLabel(member, names)} on this day.` : 'Nothing scheduled.'}
         </p>
       )}
+      {allDayEvents.length > 0 && (
+        <ul className="evts">
+          {allDayEvents.map((e) => <EventRow key={e.id} event={e} date={selectedIso} onEdit={edit} names={names} />)}
+        </ul>
+      )}
       {showGrid && gridCount > 0 && (
         <ScheduleGrid
           items={allItems}
@@ -183,9 +190,9 @@ export default function Calendar() {
           }}
         />
       )}
-      {listEvents.length > 0 && (
+      {timedEvents.length > 0 && (
         <ul className="evts">
-          {listEvents.map((e) => <EventRow key={e.id} event={e} date={selectedIso} onEdit={edit} names={names} />)}
+          {timedEvents.map((e) => <EventRow key={e.id} event={e} date={selectedIso} onEdit={edit} names={names} />)}
         </ul>
       )}
 
