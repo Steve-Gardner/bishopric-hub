@@ -369,8 +369,9 @@ export function buildScript(input: ScriptInput): Block[] {
   // Speakers and music: or, on a fast Sunday, testimonies.
   if (input.fastSunday) {
     out.push({ kind: 'heading', text: 'Testimonies' })
+    out.push({ kind: 'say', text: 'Thank you.' })
     out.push({ kind: 'cue', text: 'Bishopric member shares testimony' })
-    out.push({ kind: 'say', text: `Thank you. Brothers and Sisters, the time is now yours to share your testimonies of the Savior and His gospel. We will go until about ${FAST_SUNDAY_END}.` })
+    out.push({ kind: 'say', text: `Brothers and Sisters, the time is now yours to share your testimonies of the Savior and His gospel. We will go until about ${FAST_SUNDAY_END}.` })
     out.push({ kind: 'cue', text: 'Bishopric member sits down' })
   } else {
     const items = program.filter((e) => ['youth-speaker', 'adult-speaker', 'speaker', 'musical', 'choir'].includes(e.role))
