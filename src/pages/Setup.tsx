@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { exportBackup, importBackup } from '../data/backup'
 import { cloudEnabled } from '../data/cloud'
@@ -85,6 +86,7 @@ export default function Setup() {
           {message && <p role="status">{message}</p>}
         </div>
       </Fold>
+      <p className="muted small"><Link to="/import">Load prepared changes</Link> (paste a block of text someone prepared)</p>
     </section>
   )
 }
