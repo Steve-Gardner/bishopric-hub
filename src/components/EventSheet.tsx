@@ -24,11 +24,14 @@ export default function EventSheet({ event, exists, occurrence, onClose, onChang
   const { names } = useStaff()
   const { block, dialog } = useBlocker()
   const [draft, setDraft] = useState(event)
+  const [allDay, setAllDay] = useState(exists && !event.time) // an event with no time is an all-day event
+  const [timeError, setTimeError] = useState('')
   const rec = draft.recurrence
 
   const done = () => { onClose(); onChanged() }
   const save = async () => {
     if (!draft.title.trim()) return
+    if (!allDay && !draft.time) { setTimeError('Enter a start time, or check All day.'); return }
     // Never book someone who is already booked at that time (checked for every date a repeating event lands on).
     const clashes = eventConflicts(draft, await eventStore.list(), await appointmentStore.list(), names, format(new Date(), 'yyyy-MM-dd'))
     if (clashes.length) { block(clashes.map((c) => c.message)); return }
@@ -70,14 +73,27 @@ export default function EventSheet({ event, exists, occurrence, onClose, onChang
         <label>{rec ? 'First day' : 'Date'}
           <input type="date" value={draft.date} onChange={(ev) => setDraft({ ...draft, date: ev.target.value })} />
         </label>
-        <div className="row">
-          <label>Start time
-            <input type="time" value={draft.time ?? ''} onChange={(ev) => setDraft({ ...draft, time: ev.target.value || undefined })} />
-          </label>
-          <label>End time
-            <input type="time" value={draft.endTime ?? ''} onChange={(ev) => setDraft({ ...draft, endTime: ev.target.value || undefined })} />
-          </label>
-        </div>
+        <label className="all-day">
+          <input
+            type="checkbox" checked={allDay}
+            onChange={(ev) => {
+              setAllDay(ev.target.checked)
+              setTimeError('')
+              if (ev.target.checked) setDraft({ ...draft, time: undefined, endTime: undefined }) // all day: no times
+            }}
+          /> All day
+        </label>
+        {!allDay && (
+          <div className="row">
+            <label>Start time
+              <input type="time" value={draft.time ?? ''} onChange={(ev) => { setTimeError(''); setDraft({ ...draft, time: ev.target.value || undefined }) }} />
+            </label>
+            <label>End time
+              <input type="time" value={draft.endTime ?? ''} onChange={(ev) => setDraft({ ...draft, endTime: ev.target.value || undefined })} />
+            </label>
+          </div>
+        )}
+        {timeError && <p role="alert" className="form-error">{timeError}</p>}
 
         <label>Location
           <input value={draft.location ?? ''} onChange={(ev) => setDraft({ ...draft, location: ev.target.value || undefined })} />

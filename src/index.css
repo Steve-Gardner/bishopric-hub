@@ -799,3 +799,5 @@ button.board-event { text-align: left; cursor: pointer; font: inherit; }
 .script-wizard .visitor-box .visitor-x { position: absolute; top: 4px; right: 4px; margin: 0; padding: 0 7px; line-height: 1.4; }
 .script-wizard .visitor-box > label:first-child { padding-right: 28px; }
 .script-wizard .visitor-add { width: 34px; height: 34px; padding: 0; margin: 4px 0; font-size: 1.3rem; line-height: 1; border-radius: 50%; }
+.sheet label.all-day { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 1rem; margin: 4px 0 12px; }
+.sheet label.all-day input { width: auto; margin: 0; }
