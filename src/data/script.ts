@@ -146,9 +146,6 @@ export function defaultTitle(name: string, group?: 'young-men' | 'young-women', 
 const nameOf = (line: string) => line.split(/\s+as\s+/i)[0].trim() || 'this individual'
 const isOne = (items: string[]) => items.length === 1 && !/,|\band\b|&/i.test(nameOf(items[0]))
 
-const sentenceList = (items: string[]) =>
-  items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`
-
 export interface ProgramPerson {
   entry: SacramentEntry
   name: string
@@ -193,18 +190,18 @@ function said(input: ScriptInput, e: SacramentEntry, seen: Set<string>): string 
   return first ? `${title} ${name}` : `${title} ${lastName(name)}`
 }
 
-// "We will now have the privilege of having the baby blessing for Anabeth. She will be blessed by her father, Greg."
+// "We will now have the privilege of having the baby blessing for Anabeth Simmons, who will be blessed by her father, Greg Simmons."
 function babyAnnouncement(babies: Baby[]): string {
   const list = babies.length ? babies : [emptyBaby()]
   const many = list.length > 1
-  const names = list.map((b) => b.name.trim() || BLANK)
-  const lines = list.map((b, i) => {
-    const pronoun = b.gender === 'girl' ? { subject: 'She', has: 'her' } : b.gender === 'boy' ? { subject: 'He', has: 'his' } : null
-    const subject = !many && pronoun ? pronoun.subject : names[i]
+  const each = list.map((b) => {
+    const has = b.gender === 'girl' ? 'her' : b.gender === 'boy' ? 'his' : "the baby's"
     const relation = (b.relation === 'Other' ? b.relationText.trim() : b.relation).toLowerCase() || '[relationship]'
-    return `${subject} will be blessed by ${pronoun ? pronoun.has : "the baby's"} ${relation}, ${b.blesser.trim() || BLANK}.`
+    return `${b.name.trim() || BLANK}, who will be blessed by ${has} ${relation}, ${b.blesser.trim() || BLANK}`
   })
-  return `We will now have the privilege of having the baby ${many ? 'blessings' : 'blessing'} for ${sentenceList(names)}. ${lines.join(' ')} We invite any who have been asked to join in the ${many ? 'blessings' : 'blessing'} to come forward at this time.`
+  // With more than one child the entries are separated by semicolons, since each already has commas.
+  const named = many ? `${each.slice(0, -1).join('; ')}; and ${each.at(-1)}` : each[0]
+  return `We will now have the privilege of having the baby ${many ? 'blessings' : 'blessing'} for ${named}. We invite any who have been asked to join in the ${many ? 'blessings' : 'blessing'} to come forward at this time.`
 }
 
 export function buildScript(input: ScriptInput): Block[] {
