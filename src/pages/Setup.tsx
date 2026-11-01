@@ -9,6 +9,7 @@ import MyRoleSetup from './setup/MyRoleSetup'
 import AccountSetup from './setup/AccountSetup'
 import RolesSetup from './setup/RolesSetup'
 import WardMembersSetup from './setup/WardMembersSetup'
+import MusicSetup from './setup/MusicSetup'
 import YouthRosterSetup from './setup/YouthRosterSetup'
 
 export default function Setup() {
@@ -60,6 +61,10 @@ export default function Setup() {
 
       <Fold red id="setup-ward-members" title="Ward Members">
         <div className="fold-pad"><WardMembersSetup /></div>
+      </Fold>
+
+      <Fold red id="setup-music" title="Music">
+        <MusicSetup />
       </Fold>
 
       <Fold red id="setup-youth-roster" title="Youth Roster">

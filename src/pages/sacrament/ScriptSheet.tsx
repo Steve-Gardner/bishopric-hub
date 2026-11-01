@@ -7,7 +7,7 @@ import ReorderList from '../../components/ReorderList'
 import { ROLES } from '../../data/roles'
 import { ROLE_LABEL, describeEntry, nextOrder, sortEntries, youthByLastSpoke } from '../../data/sacrament'
 import { conflictFor, lookupPerson, placeEntry, resolvePerson, type Who } from '../../data/sacramentPeople'
-import { HIGH_COUNCILOR, POSITIONS, STAKE_LEADERS, TITLES, YOUTH_SPEAKER, buildScript, emptyVisitor, defaultAnswers, defaultTitle, type Block, type ConductorRole, type HymnAnswer, type ScriptAnswers, type Visitor } from '../../data/script'
+import { HIGH_COUNCILOR, POSITIONS, STAKE_LEADERS, TITLES, YOUTH_SPEAKER, buildScript, emptyBaby, emptyVisitor, defaultAnswers, RELATIONS, defaultTitle, type Baby, type Block, type ConductorRole, type HymnAnswer, type ScriptAnswers, type Visitor } from '../../data/script'
 import { listStore, sacramentStore, settingStore } from '../../data/store'
 import type { Member, SacramentEntry, SacramentRole, Youth } from '../../data/types'
 
@@ -38,6 +38,24 @@ function Marked({ text }: { text: string }) {
   )
 }
 
+// A name chosen from a short list kept in Setup, with Other for someone not on it.
+function NamePick({ label, value, names, onChange }: { label: string; value: string; names: string[]; onChange: (v: string) => void }) {
+  const [typing, setTyping] = useState(() => value !== '' && !names.includes(value))
+  const other = typing || (value !== '' && !names.includes(value))
+  return (
+    <label>{label}
+      <select value={other ? '__other' : value} onChange={(ev) => {
+        if (ev.target.value === '__other') { setTyping(true); onChange('') } else { setTyping(false); onChange(ev.target.value) }
+      }}>
+        <option value="">Choose</option>
+        {names.map((n) => <option key={n} value={n}>{n}</option>)}
+        <option value="__other">Other</option>
+      </select>
+      {other && <input aria-label={`${label}, other`} value={value} placeholder="Type a name" onChange={(ev) => onChange(ev.target.value)} />}
+    </label>
+  )
+}
+
 // The conducting script for one Sunday: a short wizard for what the program doesn't already say, and the
 // finished script below it, ready to print or save as a PDF.
 export default function ScriptSheet({ date, entries, members, youth, conducting, leaders, fastDefault, onConducting, onChange, onClose }: Props) {
@@ -48,6 +66,7 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
   // This Sunday's Sacrament Announcements, Releases and Sustainings on the Bishopric Agenda
   const [agenda, setAgenda] = useState<Pulled>({ announcements: '', releases: '', sustainings: '' })
   const loaded = useRef(false)
+  const [musicPeople, setMusicPeople] = useState<{ organists: string[]; leaders: string[] }>({ organists: [], leaders: [] }) // kept in Setup
   const [musicType, setMusicType] = useState<'musical' | 'choir'>('musical')
   const [music, setMusic] = useState({ performers: '', title: '' })
   const [addingMusic, setAddingMusic] = useState(false)
@@ -72,6 +91,8 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
         lists.filter((i) => i.list === `${key}@${date}`).sort((a, b) => a.order - b.order)
           .map((i) => [i.text, i.notes?.replace(/\s*\n\s*/g, ' ').trim()].filter(Boolean).join(': ')).join('\n')
       setAgenda({ announcements: pull('agenda:announcements'), releases: pull('agenda:releases'), sustainings: pull('agenda:sustainings') })
+      const names = (key: string) => lists.filter((i) => i.list === key).sort((a, b) => a.order - b.order).map((i) => i.text)
+      setMusicPeople({ organists: names('music:organists'), leaders: names('music:leaders') })
       const byId = Object.fromEntries(all.map((s) => [s.id, s.value]))
       let saved: Partial<ScriptAnswers> = {}
       try { saved = JSON.parse(byId[answersKey(date)] ?? '{}') } catch { /* start fresh */ }
@@ -230,9 +251,6 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
       )}
     </>
   )
-  const text = (k: keyof ScriptAnswers, label: string, hint?: string) => (
-    <label>{label}<input value={answers[k] as string} placeholder={hint} onChange={(ev) => set(k, ev.target.value as never)} /></label>
-  )
   const hymn = (k: 'openingHymn' | 'sacramentHymn' | 'closingHymn', label: string) => {
     const h: HymnAnswer = answers[k]
     const missing = !h.number.trim() && !h.title.trim()
@@ -365,8 +383,8 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
 
           <h3 className="wiz-section">Music</h3>
           <div className="row">
-            {text('pianist', 'Pianist / organist')}
-            {text('chorister', 'Chorister')}
+            <NamePick label="Organist" value={answers.pianist} names={musicPeople.organists} onChange={(v) => set('pianist', v)} />
+            <NamePick label="Music leader" value={answers.chorister} names={musicPeople.leaders} onChange={(v) => set('chorister', v)} />
           </div>
           {hymn('openingHymn', 'Opening hymn')}
           {hymn('sacramentHymn', 'Sacrament hymn')}
@@ -418,15 +436,43 @@ export default function ScriptSheet({ date, entries, members, youth, conducting,
           <label className="wiz-check"><input type="checkbox" checked={answers.babyBlessings} onChange={(ev) => set('babyBlessings', ev.target.checked)} /> Baby blessing</label>
           {answers.babyBlessings && (
             <div className="baby-names">
-              {answers.babies.map((n, i) => (
-                <div className="row" key={i}>
-                  <label>Child’s name{answers.babies.length > 1 ? ` ${i + 1}` : ''}
-                    <input value={n} placeholder="Leave blank to write it in" onChange={(ev) => set('babies', answers.babies.map((x, j) => (j === i ? ev.target.value : x)))} />
-                  </label>
-                  {answers.babies.length > 1 && <button type="button" className="danger" aria-label={`Remove child ${i + 1}`} onClick={() => set('babies', answers.babies.filter((_, j) => j !== i))}>✕</button>}
-                </div>
-              ))}
-              <button type="button" onClick={() => set('babies', [...answers.babies, ''])}>+ Add another child</button>
+              {answers.babies.map((b, i) => {
+                const update = (next: Partial<Baby>) => set('babies', answers.babies.map((x, j) => (j === i ? { ...x, ...next } : x)))
+                const several = answers.babies.length > 1
+                return (
+                  <div className={`baby-box ${several ? 'visitor-box' : ''}`} key={i}>
+                    <div className="row">
+                      <label>Child’s name{several ? ` ${i + 1}` : ''}
+                        <input value={b.name} placeholder="Leave blank to write it in" onChange={(ev) => update({ name: ev.target.value })} />
+                      </label>
+                      <label>Girl or boy
+                        <select value={b.gender} onChange={(ev) => update({ gender: ev.target.value as Baby['gender'] })}>
+                          <option value="">Not said</option>
+                          <option value="girl">Girl</option>
+                          <option value="boy">Boy</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="row">
+                      <label>Blessing given by
+                        <input value={b.blesser} placeholder="Leave blank to write it in" onChange={(ev) => update({ blesser: ev.target.value })} />
+                      </label>
+                      <label>Relationship
+                        <select value={b.relation} onChange={(ev) => update({ relation: ev.target.value as Baby['relation'] })}>
+                          {RELATIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    {b.relation === 'Other' && (
+                      <label>How are they related? (for example, uncle)
+                        <input value={b.relationText} onChange={(ev) => update({ relationText: ev.target.value })} />
+                      </label>
+                    )}
+                    {several && <button type="button" className="danger visitor-x" aria-label={`Remove child ${i + 1}`} onClick={() => set('babies', answers.babies.filter((_, j) => j !== i))}>✕</button>}
+                  </div>
+                )
+              })}
+              <button type="button" onClick={() => set('babies', [...answers.babies, emptyBaby()])}>+ Add another child</button>
             </div>
           )}
 

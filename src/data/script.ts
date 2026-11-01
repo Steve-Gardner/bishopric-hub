@@ -8,6 +8,20 @@ import type { SacramentEntry } from './types'
 
 export interface HymnAnswer { number: string; title: string }
 
+export const RELATIONS = ['Father', 'Grandfather', 'Other'] as const
+// One baby blessing: who the child is, who gives the blessing and how they are related. The child's pronouns are
+// asked, never worked out from the name.
+export interface Baby {
+  name: string
+  gender: '' | 'girl' | 'boy'
+  blesser: string
+  relation: (typeof RELATIONS)[number]
+  relationText: string // used when the relation is Other
+}
+export const emptyBaby = (): Baby => ({ name: '', gender: '', blesser: '', relation: 'Father', relationText: '' })
+// Older saved answers kept only the child's name.
+const asBaby = (b: unknown): Baby => (typeof b === 'string' ? { ...emptyBaby(), name: b } : { ...emptyBaby(), ...(b as Partial<Baby>) })
+
 export const WARD_NAME = 'Ben Lomond 5th'
 // When the testimonies are expected to end on a fast Sunday. It changes once a year, with the meeting time.
 export const FAST_SUNDAY_END = '12:50'
@@ -36,7 +50,7 @@ export interface ScriptAnswers {
   firstAbsent?: boolean // ...and when he is away too, the second counselor
   secondAbsent?: boolean
   dyslexic?: boolean // print in the dyslexia-friendly font; absent means on when the bishop conducts
-  babies: string[] // the children's names; a blank entry prints as a blank to write in
+  babies: Baby[] // the children being blessed; anything left blank prints as a blank to write in
   titles: Record<string, string> // how to address a person, by entry id: Brother, Sister, President, or '' to say the name as entered
 }
 
@@ -179,6 +193,20 @@ function said(input: ScriptInput, e: SacramentEntry, seen: Set<string>): string 
   return first ? `${title} ${name}` : `${title} ${lastName(name)}`
 }
 
+// "We will now have the privilege of hearing the baby blessing for Anabeth. She will be blessed by her father, Greg."
+function babyAnnouncement(babies: Baby[]): string {
+  const list = babies.length ? babies : [emptyBaby()]
+  const many = list.length > 1
+  const names = list.map((b) => b.name.trim() || BLANK)
+  const lines = list.map((b, i) => {
+    const pronoun = b.gender === 'girl' ? { subject: 'She', has: 'her' } : b.gender === 'boy' ? { subject: 'He', has: 'his' } : null
+    const subject = !many && pronoun ? pronoun.subject : names[i]
+    const relation = (b.relation === 'Other' ? b.relationText.trim() : b.relation).toLowerCase() || '[relationship]'
+    return `${subject} will be blessed by ${pronoun ? pronoun.has : "the baby's"} ${relation}, ${b.blesser.trim() || BLANK}.`
+  })
+  return `We will now have the privilege of hearing the baby ${many ? 'blessings' : 'blessing'} for ${sentenceList(names)}. ${lines.join(' ')} We invite any who have been asked to join in the ${many ? 'blessings' : 'blessing'} to come forward at this time.`
+}
+
 export function buildScript(input: ScriptInput): Block[] {
   const a = input.answers
   const out: Block[] = []
@@ -232,7 +260,7 @@ export function buildScript(input: ScriptInput): Block[] {
     kind: 'say',
     text:
       `Brothers and Sisters, we welcome you to the sacrament meeting of the ${WARD_NAME} Ward. ` +
-      `${intro} We welcome any new members or visitors that are here with us today. ` +
+      `${intro} We welcome any new members or visitors that are here with us. ` +
       `Thank you for worshiping our Savior, Jesus Christ with us today.`,
   })
 
@@ -275,7 +303,7 @@ export function buildScript(input: ScriptInput): Block[] {
   const announcements = lines(a.announcements ?? '')
   out.push({ kind: 'heading', text: 'Brief Announcements' })
   if (announcements.length) {
-    const howMany = announcements.length === 1 ? 'one brief announcement' : announcements.length === 2 ? 'a couple of brief announcements' : 'a few brief announcements'
+    const howMany = announcements.length === 1 ? 'one brief announcement' : announcements.length === 2 ? 'a couple brief announcements' : 'a few brief announcements'
     out.push({ kind: 'say', text: `We have ${howMany} today.` })
     out.push({ kind: 'list', items: announcements })
   } else {
@@ -305,13 +333,20 @@ export function buildScript(input: ScriptInput): Block[] {
     }
   }
 
-  // Sacrament
+  // Sacrament. With no stake business, the callings, the baby blessing and the sacrament hymn are announced one
+  // after another. With stake business, the time is turned over after the callings, and the bishopric member
+  // comes back up to announce the baby blessing and the hymn.
   out.push({ kind: 'heading', text: 'Sacrament Hymn & Sacrament' })
   const stake = a.stakeBusiness
-  if (stake) out.push({ kind: 'say', text: `We will now turn the time over to ${a.stakeWho.trim() || BLANK} for Stake Business.` })
+  const baby = a.babyBlessings ? babyAnnouncement(a.babies.map(asBaby)) : ''
+  if (stake) {
+    out.push({ kind: 'say', text: `We will now turn the time over to ${a.stakeWho.trim() || BLANK} for Stake Business.` })
+    out.push({ kind: 'cue', text: 'Bishopric member stands up after the stake business' })
+  }
+  if (baby) out.push({ kind: 'say', text: baby })
   out.push({
     kind: 'say',
-    text: `${stake ? 'Following the stake business, we' : 'We'} will prepare to remember the Savior through the sacrament by singing ${hymnText(a.sacramentHymn)}.`,
+    text: `${stake && !baby ? 'Following the stake business, we' : 'We'} will prepare to remember the Savior through the sacrament by singing ${hymnText(a.sacramentHymn)}.`,
   })
   out.push({ kind: 'sub', text: 'Blessing on the bread' })
   out.push({
@@ -326,19 +361,11 @@ export function buildScript(input: ScriptInput): Block[] {
       'O God, the Eternal Father, we ask thee in the name of thy Son, Jesus Christ, to bless and sanctify this water to the souls of all those who drink of it, that they may do it in remembrance of the blood of thy Son, which was shed for them; that they may witness unto thee, O God, the Eternal Father, that they do always remember him, that they may have his Spirit to be with them. Amen.',
   })
 
-  // Baby blessings (draft wording)
-  if (a.babyBlessings) {
-    const babies = a.babies.length ? a.babies.map((n) => n.trim() || BLANK) : [BLANK]
-    out.push({ kind: 'heading', text: 'Baby Blessings' })
-    out.push({ kind: 'cue', text: 'Bishopric member stands up after the sacrament' })
-    out.push({ kind: 'say', text: `We will now have the privilege of hearing the baby ${babies.length > 1 ? 'blessings' : 'blessing'} for ${sentenceList(babies)}.` })
-  }
-
   // Speakers and music: or, on a fast Sunday, testimonies.
   if (input.fastSunday) {
     out.push({ kind: 'heading', text: 'Testimonies' })
     out.push({ kind: 'cue', text: 'Bishopric member shares testimony' })
-    out.push({ kind: 'say', text: `Brothers and Sisters, the time is now yours to share your testimonies of the Savior and His gospel. We will go until about ${FAST_SUNDAY_END}.` })
+    out.push({ kind: 'say', text: `Thank you. Brothers and Sisters, the time is now yours to share your testimonies of the Savior and His gospel. We will go until about ${FAST_SUNDAY_END}.` })
     out.push({ kind: 'cue', text: 'Bishopric member sits down' })
   } else {
     const items = program.filter((e) => ['youth-speaker', 'adult-speaker', 'speaker', 'musical', 'choir'].includes(e.role))
@@ -380,7 +407,7 @@ export function buildScript(input: ScriptInput): Block[] {
   }
   out.push({
     kind: 'say',
-    text: `${input.fastSunday ? 'Brothers and Sisters, thank you for your testimonies today. ' : ''}Our closing hymn will be ${hymnShort(a.closingHymn)}. ${closing ? said(input, closing, seen) : '[Name]'} will offer the closing prayer.`,
+    text: `${input.fastSunday ? 'Brothers and Sisters, thank you for your testimonies of the Savior and His Gospel today. ' : ''}Our closing hymn will be ${hymnShort(a.closingHymn)}. ${closing ? said(input, closing, seen) : '[Name]'} will offer the closing prayer.`,
   })
   return out
 }
@@ -393,8 +420,9 @@ export function defaultAnswers(entries: SacramentEntry[], base: Partial<ScriptAn
   const hymns = sortEntries(entries).filter((e) => e.role === 'hymn').map((e) => ({ number: e.details?.number ?? '', title: e.details?.title ?? '' }))
   return {
     presiding: '', visitors: [], pianist: '', chorister: '',
-    stakeBusiness: false, stakeWho: '', babyBlessings: false, babies: [''], titles: {},
+    stakeBusiness: false, stakeWho: '', babyBlessings: false, titles: {},
     ...base,
+    babies: (base.babies?.length ? base.babies : [emptyBaby()]).map(asBaby),
     openingHymn: base.openingHymn ?? hymns[0] ?? emptyHymn(),
     sacramentHymn: base.sacramentHymn ?? hymns[1] ?? emptyHymn(),
     closingHymn: base.closingHymn ?? hymns[2] ?? emptyHymn(),
