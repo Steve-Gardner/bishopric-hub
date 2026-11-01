@@ -4,6 +4,7 @@ import Agenda from './pages/Agenda'
 import Calendar from './pages/calendar/Calendar'
 import FontToggle from './components/FontToggle'
 import EventAgenda from './pages/EventAgenda'
+import ImportChanges from './pages/ImportChanges'
 import Fsy from './pages/Fsy'
 import Home, { SECTIONS } from './pages/Home'
 import Schedule from './pages/Schedule'
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/fsy" element={<Fsy />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="/import" element={<ImportChanges />} />
         </Routes>
       </main>
     </HashRouter>
