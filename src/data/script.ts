@@ -193,7 +193,7 @@ function said(input: ScriptInput, e: SacramentEntry, seen: Set<string>): string 
   return first ? `${title} ${name}` : `${title} ${lastName(name)}`
 }
 
-// "We will now have the privilege of hearing the baby blessing for Anabeth. She will be blessed by her father, Greg."
+// "We will now have the privilege of having the baby blessing for Anabeth. She will be blessed by her father, Greg."
 function babyAnnouncement(babies: Baby[]): string {
   const list = babies.length ? babies : [emptyBaby()]
   const many = list.length > 1
@@ -204,7 +204,7 @@ function babyAnnouncement(babies: Baby[]): string {
     const relation = (b.relation === 'Other' ? b.relationText.trim() : b.relation).toLowerCase() || '[relationship]'
     return `${subject} will be blessed by ${pronoun ? pronoun.has : "the baby's"} ${relation}, ${b.blesser.trim() || BLANK}.`
   })
-  return `We will now have the privilege of hearing the baby ${many ? 'blessings' : 'blessing'} for ${sentenceList(names)}. ${lines.join(' ')} We invite any who have been asked to join in the ${many ? 'blessings' : 'blessing'} to come forward at this time.`
+  return `We will now have the privilege of having the baby ${many ? 'blessings' : 'blessing'} for ${sentenceList(names)}. ${lines.join(' ')} We invite any who have been asked to join in the ${many ? 'blessings' : 'blessing'} to come forward at this time.`
 }
 
 export function buildScript(input: ScriptInput): Block[] {
