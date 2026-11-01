@@ -307,10 +307,15 @@ export function buildScript(input: ScriptInput): Block[] {
     out.push({ kind: 'say', text: "We don't have any announcements today." })
   }
 
-  // Ward business
+  // Ward business: releases, sustainings, and a baby blessing. The section appears when there is a baby blessing
+  // even if there are no callings. Stake business is announced here too when there is a baby blessing, because the
+  // bishopric member comes back up after it to announce the blessing.
   const releases = lines(a.releases ?? '')
   const sustainings = lines(a.sustainings ?? '')
-  if (releases.length || sustainings.length) {
+  const stake = a.stakeBusiness
+  const baby = a.babyBlessings ? babyAnnouncement(a.babies.map(asBaby)) : ''
+  const stakeLine = `We will now turn the time over to ${a.stakeWho.trim() || BLANK} for Stake Business.`
+  if (releases.length || sustainings.length || baby) {
     out.push({ kind: 'heading', text: 'Ward Business' })
     if (releases.length) {
       const one = isOne(releases)
@@ -328,19 +333,19 @@ export function buildScript(input: ScriptInput): Block[] {
       out.push({ kind: 'list', items: sustainings })
       out.push({ kind: 'say', text: `Those in favor of sustaining ${one ? nameOf(sustainings[0]) : 'them'} may show it by the uplifted hand (Pause). Those opposed, if any, may do so (Pause).` })
     }
+    if (baby) {
+      if (stake) {
+        out.push({ kind: 'say', text: stakeLine })
+        out.push({ kind: 'cue', text: 'Bishopric member stands up after the stake business' })
+      }
+      out.push({ kind: 'say', text: baby })
+    }
   }
 
-  // Sacrament. With no stake business, the callings, the baby blessing and the sacrament hymn are announced one
-  // after another. With stake business, the time is turned over after the callings, and the bishopric member
-  // comes back up to announce the baby blessing and the hymn.
+  // Sacrament. The hymn is announced right after the callings and the baby blessing, with no pause. Without a baby
+  // blessing, stake business comes first here, as in the original script.
   out.push({ kind: 'heading', text: 'Sacrament Hymn & Sacrament' })
-  const stake = a.stakeBusiness
-  const baby = a.babyBlessings ? babyAnnouncement(a.babies.map(asBaby)) : ''
-  if (stake) {
-    out.push({ kind: 'say', text: `We will now turn the time over to ${a.stakeWho.trim() || BLANK} for Stake Business.` })
-    out.push({ kind: 'cue', text: 'Bishopric member stands up after the stake business' })
-  }
-  if (baby) out.push({ kind: 'say', text: baby })
+  if (stake && !baby) out.push({ kind: 'say', text: stakeLine })
   out.push({
     kind: 'say',
     text: `${stake && !baby ? 'Following the stake business, we' : 'We'} will prepare to remember the Savior through the sacrament by singing ${hymnText(a.sacramentHymn)}.`,
