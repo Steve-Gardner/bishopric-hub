@@ -304,7 +304,7 @@ export function buildScript(input: ScriptInput): Block[] {
   out.push({ kind: 'heading', text: 'Brief Announcements' })
   if (announcements.length) {
     const howMany = announcements.length === 1 ? 'one brief announcement' : announcements.length === 2 ? 'a couple brief announcements' : 'a few brief announcements'
-    out.push({ kind: 'say', text: `We have ${howMany} today.` })
+    out.push({ kind: 'say', text: `We have ${howMany}.` })
     out.push({ kind: 'list', items: announcements })
   } else {
     out.push({ kind: 'say', text: "We don't have any announcements today." })
