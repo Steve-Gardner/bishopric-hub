@@ -307,15 +307,14 @@ export function buildScript(input: ScriptInput): Block[] {
     out.push({ kind: 'say', text: "We don't have any announcements today." })
   }
 
-  // Ward business: releases, sustainings, and a baby blessing. The section appears when there is a baby blessing
-  // even if there are no callings. Stake business is announced here too when there is a baby blessing, because the
-  // bishopric member comes back up after it to announce the blessing.
+  // Ward business: releases and sustainings. Stake business and a baby blessing each get a section of their own,
+  // after it, when they happen.
   const releases = lines(a.releases ?? '')
   const sustainings = lines(a.sustainings ?? '')
   const stake = a.stakeBusiness
   const baby = a.babyBlessings ? babyAnnouncement(a.babies.map(asBaby)) : ''
   const stakeLine = `We will now turn the time over to ${a.stakeWho.trim() || BLANK} for Stake Business.`
-  if (releases.length || sustainings.length || baby) {
+  if (releases.length || sustainings.length) {
     out.push({ kind: 'heading', text: 'Ward Business' })
     if (releases.length) {
       const one = isOne(releases)
@@ -333,19 +332,23 @@ export function buildScript(input: ScriptInput): Block[] {
       out.push({ kind: 'list', items: sustainings })
       out.push({ kind: 'say', text: `Those in favor of sustaining ${one ? nameOf(sustainings[0]) : 'them'} may show it by the uplifted hand (Pause). Those opposed, if any, may do so (Pause).` })
     }
-    if (baby) {
-      if (stake) {
-        out.push({ kind: 'say', text: stakeLine })
-        out.push({ kind: 'cue', text: 'Bishopric member stands up after the stake business' })
-      }
-      out.push({ kind: 'say', text: baby })
-    }
   }
 
-  // Sacrament. The hymn is announced right after the callings and the baby blessing, with no pause. Without a baby
-  // blessing, stake business comes first here, as in the original script.
+  // Stake business: the time is turned over, and the bishopric member stands back up afterwards.
+  if (stake) {
+    out.push({ kind: 'heading', text: 'Stake Business' })
+    out.push({ kind: 'say', text: stakeLine })
+    out.push({ kind: 'cue', text: 'Bishopric member stands up after the stake business' })
+  }
+
+  // Baby blessing
+  if (baby) {
+    out.push({ kind: 'heading', text: 'Baby Blessing' })
+    out.push({ kind: 'say', text: baby })
+  }
+
+  // Sacrament: the hymn is announced right after whatever came before it, with no pause.
   out.push({ kind: 'heading', text: 'Sacrament Hymn & Sacrament' })
-  if (stake && !baby) out.push({ kind: 'say', text: stakeLine })
   out.push({
     kind: 'say',
     text: `${stake && !baby ? 'Following the stake business, we' : 'We'} will prepare to remember the Savior through the sacrament by singing ${hymnText(a.sacramentHymn)}.`,
